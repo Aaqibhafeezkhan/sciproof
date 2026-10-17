@@ -51,6 +51,11 @@ def _hash_inputs(base: Path, inputs: list[str]) -> list[dict[str, Any]]:
     records = []
     for relative in inputs:
         path = base / relative
+        if path.is_dir():
+            raise CaptureError(
+                f"input {relative!r} is a directory; only files can be declared "
+                "(directory support is tracked in issue #5)"
+            )
         if not path.is_file():
             raise CaptureError(f"input file not found: {relative}")
         digest, size = sha256_file(path)
@@ -119,6 +124,11 @@ def capture(
     before = {}
     for relative in exact_paths + numeric_paths:
         target = base / relative
+        if target.is_dir():
+            raise CaptureError(
+                f"output {relative!r} is a directory; only files can be declared "
+                "(directory support is tracked in issue #5)"
+            )
         before[relative] = sha256_file(target)[0] if target.is_file() else None
 
     git = git_info(base)
