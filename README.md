@@ -154,7 +154,7 @@ Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
 * Numeric comparison supports `.json` and `.csv` only (plain stdlib parsing).
 * The environment is probed from the command's interpreter only if the command is a Python
   interpreter; otherwise the interpreter running SciProof is described (and the manifest says so).
-* Windows and Linux are tested in CI (Python 3.11-3.13); macOS is expected to work but is not tested yet (good first issue #4).
+* Linux, Windows and macOS are tested in CI (Python 3.11-3.13).
 * The unit tests that check symlink escapes need symlink support (they run in Linux CI and are
   skipped where symlinks are unavailable).
 

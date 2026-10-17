@@ -119,6 +119,19 @@ def test_missing_input_is_an_error(project):
         project.capture(inputs=["data.json", "does-not-exist.csv"])
 
 
+def test_a_directory_as_input_is_reported_as_such(project):
+    (project.root / "folder").mkdir()
+    with pytest.raises(CaptureError, match="is a directory"):
+        project.capture(inputs=["data.json", "folder"])
+
+
+def test_a_directory_as_output_is_reported_as_such(project):
+    (project.root / "folder.json").mkdir()
+    with pytest.raises(CaptureError, match="is a directory"):
+        project.capture(outputs=[], numeric_outputs=["folder.json"])
+    assert project.runs() == 0
+
+
 def test_command_must_not_modify_declared_inputs(project):
     with pytest.raises(CaptureError, match="modified or removed the declared input"):
         project.capture(
