@@ -212,5 +212,7 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
     validate_manifest(manifest)
     text = json.dumps(manifest, indent=2) + "\n"
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(text, encoding="utf-8")
+    # Bytes, not text mode: the file must be identical on every OS (LF only), because hashes and
+    # signatures cover its exact bytes.
+    temporary.write_bytes(text.encode("utf-8"))
     os.replace(temporary, path)

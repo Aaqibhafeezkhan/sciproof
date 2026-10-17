@@ -182,3 +182,16 @@ def test_to_manifest_path_rejects_paths_outside_the_base(tmp_path):
     with pytest.raises(UnsafePathError):
         to_manifest_path(base, tmp_path / "other.txt")
     assert to_manifest_path(base, base / "sub" / "f.txt") == "sub/f.txt"
+
+
+def test_manifest_bytes_use_lf_line_endings_on_every_os(project):
+    project.capture()
+    raw = project.manifest.read_bytes()
+    assert b"\r" not in raw
+    assert raw.endswith(b"}\n")
+    # a snapshot-independent check: writing the parsed data again gives identical bytes
+    from sciproof.manifest import write_manifest
+
+    data = json.loads(raw)
+    write_manifest(project.manifest, data)
+    assert project.manifest.read_bytes() == raw
