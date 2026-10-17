@@ -168,7 +168,7 @@ Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
 | [ReproZip](https://docs.reprozip.org/en/1.x/) | Packs a Linux experiment with its files and dependencies so it can be rerun elsewhere. SciProof does not package anything. |
 | [Sumatra](https://sumatra.readthedocs.io/en/latest/introduction.html) | Electronic-lab-notebook style run records. |
 | [MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/) | Experiment tracking for ML with parameters and metrics, optional UI. |
-| [RO-Crate](https://www.researchobject.org/ro-crate/specification/1.1/introduction.html) | A standard to *describe* research outputs; does not verify them. |
+| [RO-Crate](https://www.researchobject.org/ro-crate/specification/1.1/introduction.html) | A standard to *describe* research outputs; does not verify them. Mapping study: [docs/DESIGN_RO_CRATE.md](docs/DESIGN_RO_CRATE.md). |
 
 Full analysis, with what could not be confirmed: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md).
 
