@@ -116,6 +116,8 @@ Exit codes: `0` PASS, `1` FAIL, `2` INCONCLUSIVE, `3` usage error or invalid man
 input, a missing numeric snapshot, a command that cannot be started, a timeout or a declined
 rerun are `INCONCLUSIVE`, never `PASS`.
 
+A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/TUTORIAL_NUMPY_PANDAS.md](docs/TUTORIAL_NUMPY_PANDAS.md).
+
 ## Commands
 
 ```text

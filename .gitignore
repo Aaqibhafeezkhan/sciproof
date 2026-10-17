@@ -9,4 +9,5 @@ dist/
 
 # Output of the example and of re-executions (see docs/CONCEPTS.md)
 examples/out/
+examples/numpy_pandas/out/
 .sciproof-rerun-*/
