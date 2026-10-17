@@ -51,7 +51,7 @@ _IGNORED_PARTS = {"__pycache__", ".git", ".hg", ".venv", "venv", "site-packages"
 class Suggestions:
     exit_code: int
     inside: list[str] = field(default_factory=list)  # undeclared files below the base directory
-    outside: list[str] = field(default_factory=list)  # undeclared files elsewhere (not Python's own)
+    outside: list[str] = field(default_factory=list)  # undeclared files elsewhere
 
 
 def _python_prefixes() -> list[Path]:
