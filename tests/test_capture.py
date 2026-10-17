@@ -239,3 +239,48 @@ def test_timeout_is_enforced_when_the_command_leaves_a_child_running(project):
 
     time.sleep(4.5)  # long enough for a surviving child to have written its marker
     assert not (project.root / "late.txt").exists(), "the child process survived the timeout"
+
+
+def _snapshot_files(project):
+    folder = project.root / "exp.sciproof.d"
+    return sorted(p.name for p in folder.iterdir()) if folder.exists() else []
+
+
+TWO_NUMERIC = (
+    "import pathlib; "
+    "pathlib.Path('p.json').write_text('[1]'); "
+    "pathlib.Path('q.json').write_text('[2]')"
+)
+
+
+def test_force_replaces_the_snapshots_and_drops_stale_ones(project):
+    argv = [sys.executable, "-c", TWO_NUMERIC]
+    project.capture(argv=argv, outputs=[], numeric_outputs=["p.json", "q.json"])
+    assert _snapshot_files(project) == ["0-p.json", "1-q.json"]
+
+    project.capture(argv=argv, outputs=[], numeric_outputs=["p.json"], force=True)
+    assert _snapshot_files(project) == ["0-p.json"]  # 1-q.json is no longer referenced
+
+
+def test_force_without_numeric_outputs_removes_the_snapshot_directory(project):
+    argv = [sys.executable, "-c", TWO_NUMERIC]
+    project.capture(argv=argv, outputs=[], numeric_outputs=["p.json"])
+    project.capture(argv=argv, outputs=["q.json"], numeric_outputs=[], force=True)
+    assert not (project.root / "exp.sciproof.d").exists()
+
+
+def test_a_failed_capture_leaves_the_earlier_evidence_intact(project):
+    argv = [sys.executable, "-c", TWO_NUMERIC]
+    project.capture(argv=argv, outputs=[], numeric_outputs=["p.json"])
+    before = (project.root / "exp.sciproof.d" / "0-p.json").read_text()
+    manifest_before = project.manifest.read_text()
+
+    with pytest.raises(CaptureError):  # p.json is fine, but missing.json is never written
+        project.capture(
+            argv=argv, outputs=[], numeric_outputs=["p.json", "missing.json"], force=True
+        )
+
+    assert (project.root / "exp.sciproof.d" / "0-p.json").read_text() == before
+    assert project.manifest.read_text() == manifest_before
+    assert not (project.root / "exp.sciproof.d.tmp").exists()
+    assert _snapshot_files(project) == ["0-p.json"]
