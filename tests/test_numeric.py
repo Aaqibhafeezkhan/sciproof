@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from sciproof.numeric import NumericFormatError, compare, load_numeric
+
+
+def _json(path, value):
+    path.write_text(json.dumps(value))
+    return load_numeric(path)
+
+
+def test_values_within_relative_tolerance_are_equivalent(tmp_path):
+    a = _json(tmp_path / "a.json", {"x": 1000.0, "y": [1, 2]})
+    b = _json(tmp_path / "b.json", {"x": 1000.0000001, "y": [1, 2]})
+    assert compare(a, b, rtol=1e-6, atol=0.0) == []
+    assert compare(a, b, rtol=1e-12, atol=0.0) != []
+
+
+def test_absolute_tolerance_matters_near_zero(tmp_path):
+    a = _json(tmp_path / "a.json", {"x": 0.0})
+    b = _json(tmp_path / "b.json", {"x": 1e-9})
+    assert compare(a, b, rtol=1e-6, atol=0.0) != []  # relative tolerance of 0 is 0
+    assert compare(a, b, rtol=0.0, atol=1e-6) == []
+
+
+def test_zero_tolerance_means_exact(tmp_path):
+    a = _json(tmp_path / "a.json", {"x": 0.1 + 0.2})
+    b = _json(tmp_path / "b.json", {"x": 0.3})
+    assert compare(a, b, rtol=0.0, atol=0.0) != []
+
+
+def test_nan_equals_nan_and_infinities_must_match(tmp_path):
+    (tmp_path / "a.json").write_text('{"x": NaN, "y": Infinity}')
+    (tmp_path / "b.json").write_text('{"x": NaN, "y": Infinity}')
+    (tmp_path / "c.json").write_text('{"x": NaN, "y": -Infinity}')
+    a, b, c = (load_numeric(tmp_path / f"{n}.json") for n in "abc")
+    assert compare(a, b, 0, 0) == []
+    assert compare(a, c, 1.0, 1.0) != []
+
+
+def test_non_numeric_values_must_match_exactly(tmp_path):
+    a = _json(tmp_path / "a.json", {"label": "ok", "flag": True, "none": None})
+    b = _json(tmp_path / "b.json", {"label": "ok ", "flag": True, "none": None})
+    assert compare(a, b, 1.0, 1.0) != []
+
+
+def test_booleans_are_not_numbers(tmp_path):
+    a = _json(tmp_path / "a.json", {"flag": True})
+    b = _json(tmp_path / "b.json", {"flag": 1})
+    assert compare(a, b, 1.0, 1.0) != []
+
+
+def test_structural_differences_are_detected(tmp_path):
+    a = _json(tmp_path / "a.json", {"x": [1, 2, 3]})
+    assert compare(a, _json(tmp_path / "b.json", {"x": [1, 2]}), 1.0, 1.0) != []
+    assert compare(a, _json(tmp_path / "c.json", {"y": [1, 2, 3]}), 1.0, 1.0) != []
+
+
+def test_number_vs_string_differs(tmp_path):
+    a = _json(tmp_path / "a.json", {"x": 1})
+    b = _json(tmp_path / "b.json", {"x": "1"})
+    assert compare(a, b, 1.0, 1.0) != []
+
+
+def test_csv_numbers_are_compared_with_tolerance_and_text_exactly(tmp_path):
+    (tmp_path / "a.csv").write_text("name,value\nrun1,1.000000\nrun2,2.0\n")
+    (tmp_path / "b.csv").write_text("name,value\nrun1,1.0000001\nrun2,2.0\n")
+    (tmp_path / "c.csv").write_text("name,value\nrunX,1.0\nrun2,2.0\n")
+    a, b, c = (load_numeric(tmp_path / f"{n}.csv") for n in "abc")
+    assert compare(a, b, rtol=1e-6, atol=0.0) == []
+    assert compare(a, c, rtol=1e-6, atol=0.0) != []
+
+
+def test_csv_shape_changes_are_detected(tmp_path):
+    (tmp_path / "a.csv").write_text("1,2\n3,4\n")
+    (tmp_path / "b.csv").write_text("1,2\n3,4\n5,6\n")
+    assert compare(load_numeric(tmp_path / "a.csv"), load_numeric(tmp_path / "b.csv"), 1, 1) != []
+
+
+def test_number_of_reported_differences_is_limited(tmp_path):
+    a = _json(tmp_path / "a.json", list(range(100)))
+    b = _json(tmp_path / "b.json", [v + 1 for v in range(100)])
+    assert len(compare(a, b, 0.0, 0.0)) == 10
+
+
+@pytest.mark.parametrize("name,content", [("a.json", "{broken"), ("b.txt", "1,2")])
+def test_unsupported_or_broken_files_raise(tmp_path, name, content):
+    (tmp_path / name).write_text(content)
+    with pytest.raises(NumericFormatError):
+        load_numeric(tmp_path / name)
+
+
+def test_non_utf8_file_raises(tmp_path):
+    (tmp_path / "a.csv").write_bytes(b"\xff\xfe1,2")
+    with pytest.raises(NumericFormatError):
+        load_numeric(tmp_path / "a.csv")

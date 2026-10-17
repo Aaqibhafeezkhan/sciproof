@@ -1,0 +1,182 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+
+import pytest
+
+from sciproof.capture import capture
+from sciproof.errors import CaptureError
+from sciproof.manifest import load_manifest
+from sciproof.runner import CommandInterrupted, run_command
+
+
+def test_capture_writes_a_valid_manifest(project):
+    result = project.capture()
+    assert result.exit_code == 0
+    assert project.manifest.is_file()
+
+    manifest = load_manifest(project.manifest)  # validates the structure
+    assert manifest["name"] == "exp"
+    assert manifest["command"]["argv"][1] == "experiment.py"
+    assert {item["path"] for item in manifest["inputs"]} == {"data.json", "experiment.py"}
+    by_path = {item["path"]: item for item in manifest["outputs"]}
+    assert by_path["out/exact.txt"]["compare"] == {"mode": "exact"}
+    assert by_path["out/result.json"]["compare"]["mode"] == "numeric"
+    assert manifest["execution"]["stdout"]["text"].strip() == "done"
+    assert manifest["environment"]["python"]["version"].count(".") == 2
+    assert (project.root / by_path["out/result.json"]["compare"]["snapshot"]["path"]).is_file()
+    assert project.runs() == 1
+
+
+def test_manifest_uses_relative_paths_and_no_absolute_directories(project):
+    project.capture()
+    text = project.manifest.read_text()
+    assert str(project.root) not in text
+    assert str(project.root).replace("\\", "/") not in text
+
+
+def test_secrets_in_the_environment_are_not_recorded(project, monkeypatch):
+    monkeypatch.setenv("MY_SECRET_TOKEN", "hunter2-super-secret")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "abcd-secret-key")
+    monkeypatch.setenv("TZ", "UTC")
+    project.capture()
+    text = project.manifest.read_text()
+    assert "hunter2-super-secret" not in text
+    assert "abcd-secret-key" not in text
+    assert json.loads(text)["environment"]["env_vars"] == {"TZ": "UTC"}
+
+
+def test_nonzero_exit_code_is_recorded(project, monkeypatch):
+    monkeypatch.setenv("SCIPROOF_TEST_EXIT", "3")
+    result = project.capture()
+    assert result.exit_code == 3
+    assert load_manifest(project.manifest)["execution"]["exit_code"] == 3
+
+
+def test_failed_command_that_produced_no_output_records_it_as_absent(project):
+    result = project.capture(
+        argv=[sys.executable, "-c", "import sys; sys.exit(5)"],
+        outputs=["out/never.txt"],
+        numeric_outputs=[],
+    )
+    assert result.exit_code == 5
+    assert load_manifest(project.manifest)["outputs"][0]["present"] is False
+
+
+def test_successful_command_must_produce_declared_outputs(project):
+    with pytest.raises(CaptureError, match="does not exist"):
+        project.capture(argv=[sys.executable, "-c", "pass"], outputs=["out/never.txt"])
+    assert not project.manifest.exists()
+
+
+def test_command_not_found_is_a_clean_error(project):
+    with pytest.raises(CaptureError, match="cannot start"):
+        project.capture(argv=["this-command-does-not-exist-sciproof"])
+    assert not project.manifest.exists()
+
+
+@pytest.mark.parametrize("argv", [[], [""]])
+def test_empty_command_is_rejected(project, argv):
+    with pytest.raises(CaptureError, match="no command"):
+        project.capture(argv=argv)
+
+
+def test_interrupted_capture_writes_no_evidence(project, monkeypatch):
+    def interrupted(*args, **kwargs):
+        raise CommandInterrupted("interrupted by the user")
+
+    monkeypatch.setattr("sciproof.capture.run_command", interrupted)
+    with pytest.raises(CaptureError, match="interrupted"):
+        project.capture()
+    assert not project.manifest.exists()
+
+
+def test_ctrl_c_during_the_command_becomes_command_interrupted(tmp_path, monkeypatch):
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(subprocess, "run", interrupted)
+    with pytest.raises(CommandInterrupted):
+        run_command(["anything"], tmp_path, None)
+
+
+def test_timeout_writes_no_evidence(project):
+    with pytest.raises(CaptureError, match="did not finish"):
+        project.capture(
+            argv=[sys.executable, "-c", "import time; time.sleep(30)"],
+            timeout=0.5,
+        )
+    assert not project.manifest.exists()
+
+
+def test_missing_input_is_an_error(project):
+    with pytest.raises(CaptureError, match="input file not found"):
+        project.capture(inputs=["data.json", "does-not-exist.csv"])
+
+
+def test_command_must_not_modify_declared_inputs(project):
+    with pytest.raises(CaptureError, match="modified or removed the declared input"):
+        project.capture(
+            argv=[sys.executable, "-c", "open('data.json', 'w').write('{}')"],
+            outputs=[],
+            numeric_outputs=[],
+        )
+    assert not project.manifest.exists()
+
+
+def test_refuses_to_overwrite_without_force(project):
+    project.capture()
+    with pytest.raises(CaptureError, match="already exists"):
+        project.capture()
+    project.capture(force=True)
+
+
+@pytest.mark.parametrize("name", ["", "../escape", "a/b", "with space", "-leading", "x" * 101])
+def test_invalid_names_are_rejected(project, name):
+    with pytest.raises(CaptureError, match="invalid name"):
+        project.capture(name=name)
+
+
+def test_at_least_one_file_must_be_declared(project):
+    with pytest.raises(CaptureError, match="declare at least one"):
+        project.capture(inputs=[], outputs=[], numeric_outputs=[])
+
+
+def test_input_and_output_must_not_overlap(project):
+    with pytest.raises(CaptureError, match="both input and output"):
+        project.capture(outputs=["data.json"])
+
+
+def test_numeric_outputs_must_be_json_or_csv(project):
+    with pytest.raises(CaptureError, match="supports"):
+        project.capture(numeric_outputs=["out/exact.txt"], outputs=[])
+
+
+def test_log_output_is_truncated_but_fully_hashed(project):
+    result = project.capture(
+        argv=[sys.executable, "-c", "print('x' * 5000)"],
+        outputs=[],
+        numeric_outputs=[],
+        max_log_bytes=100,
+    )
+    stdout = result.manifest["execution"]["stdout"]
+    assert stdout["truncated"] is True
+    assert len(stdout["text"]) == 100
+    assert stdout["size"] == 5001 + (1 if sys.platform == "win32" else 0)
+
+
+def test_capture_cannot_be_called_with_negative_tolerance(project):
+    with pytest.raises(CaptureError, match="must not be negative"):
+        project.capture(rtol=-1)
+
+
+def test_capture_function_is_usable_without_the_cli(project):
+    result = capture(
+        name="direct",
+        argv=[sys.executable, "-c", "print(1)"],
+        base=project.root,
+        inputs=["data.json"],
+    )
+    assert result.manifest_path.name == "direct.sciproof.json"
