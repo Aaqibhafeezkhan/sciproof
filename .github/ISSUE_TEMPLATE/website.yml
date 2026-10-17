@@ -1,0 +1,36 @@
+name: Website problem
+description: Report a problem with the SciProof website or documentation pages
+labels: ["website"]
+body:
+  - type: input
+    id: page-url
+    attributes:
+      label: Page URL
+      description: The page with the problem (filled in automatically by the "Report a problem with this page" link).
+      placeholder: https://hayagrivai-labs.github.io/sciproof/docs/concepts/
+    validations:
+      required: true
+  - type: dropdown
+    id: problem-type
+    attributes:
+      label: Type of problem
+      options:
+        - Broken link
+        - Wrong or outdated information
+        - Visual or layout bug
+        - Accessibility
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What is wrong?
+      description: What did you expect, and what did you see? For wrong information, please quote the text and, if you can, link to the source.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Firefox 130 on Android 15, or Chrome on a 1440p desktop

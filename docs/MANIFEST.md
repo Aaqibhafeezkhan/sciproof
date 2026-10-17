@@ -41,6 +41,44 @@ untrusted input.
 }
 ```
 
+## Field reference
+
+Every field of a manifest. Array entries are written as `[]`.
+
+| Field | Meaning |
+| --- | --- |
+| `schema` | Always `sciproof.manifest`. |
+| `schema_version` | Format version. Readers accept every `1.x` and reject other major versions. |
+| `name` | The experiment name given with `--name` (letters, digits, `.`, `_`, `-`, at most 100 characters). It also names the manifest file. |
+| `created_at` | UTC time at which the manifest was written, which is after the command finished. |
+| `tool` | Name and version of the SciProof that wrote the manifest. |
+| `command.argv` | The exact argument vector of the recorded command. It is never run through a shell. |
+| `command.cwd` | Always `.`: the command runs in the directory that contains the manifest. |
+| `environment.source` | `command-interpreter` if the command was a Python interpreter that was asked for its own version and packages, otherwise `sciproof-process` (the interpreter running SciProof). |
+| `environment.python` | Python version, implementation and byte order. |
+| `environment.platform` | Operating system name, release, machine type and platform string. |
+| `environment.env_vars` | Values of a fixed allowlist of non-secret environment variables that were set at capture time. |
+| `dependencies` | Name and version of every package installed for that interpreter. |
+| `git` | Commit, branch and whether the working tree had uncommitted or untracked changes before the run; `null` outside a Git repository. |
+| `inputs` | Declared input files. |
+| `inputs[].path` | Path relative to the manifest directory, using `/`. |
+| `inputs[].sha256` | SHA-256 of the file as it was before and after the run. |
+| `inputs[].size` | Size in bytes. |
+| `execution.exit_code` | Exit status of the recorded run. A nonzero status is recorded, not hidden. |
+| `execution.duration_seconds` | Wall-clock duration of the run. |
+| `execution.stdout` | Standard output: SHA-256 and size of the full stream, and the first bytes as text. |
+| `execution.stderr` | Standard error, recorded like `stdout`. |
+| `outputs` | Declared output files. |
+| `outputs[].path` | Path relative to the manifest directory. |
+| `outputs[].present` | Whether the file existed after the run. |
+| `outputs[].sha256` | SHA-256 of the output, or `null` if it was absent. |
+| `outputs[].size` | Size in bytes. |
+| `outputs[].compare` | How a rerun is compared with this output: `exact` (hash) or `numeric` (tolerance). |
+| `outputs[].compare.mode` | `exact` or `numeric`. |
+| `outputs[].compare.rtol` | Relative tolerance of a numeric output. |
+| `outputs[].compare.atol` | Absolute tolerance of a numeric output. |
+| `outputs[].compare.snapshot` | Path and SHA-256 of the copy of the output in `NAME.sciproof.d/`, which is compared with the rerun. |
+
 ## Notes
 
 * `command.argv` is the exact argument vector. It is never run through a shell.
