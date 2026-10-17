@@ -61,7 +61,7 @@ def test_undeclared_dependency_is_invisible_to_plain_verify_but_not_to_rerun(tmp
     """Documents the limit of declared inputs, and why 'suggest-inputs' exists."""
     argv = _project(tmp_path)
     result = capture(name="exp", argv=argv, base=tmp_path, inputs=["run.py"], outputs=["out.txt"])
-    (tmp_path / "helper.py").write_text("VALUE = 2\n")  # undeclared dependency changes
+    (tmp_path / "helper.py").write_text("VALUE = 20\n")  # new size: no stale .pyc
     assert verify(result.manifest_path).status is Status.PASS  # integrity of declared files only
     rerun = verify(result.manifest_path, rerun=True, assume_yes=True)
     assert rerun.status is Status.FAIL  # the output changed, so the rerun notices
