@@ -202,8 +202,15 @@ def _compare_environment(base: Path, manifest: dict[str, Any]) -> list[str]:
         )
 
     now_vars = selected_env_vars()
-    for name, value in recorded_env["env_vars"].items():
-        if now_vars.get(name) != value:
+    recorded_vars = recorded_env["env_vars"]
+    # Compare in both directions: a variable that is set now but was not set at capture time
+    # (for example OMP_NUM_THREADS) can change numerical results just like a changed one.
+    for name in sorted(set(recorded_vars) | set(now_vars)):
+        if name not in now_vars:
+            differences.append(f"environment variable {name} was set at capture time, not now")
+        elif name not in recorded_vars:
+            differences.append(f"environment variable {name} is set now, was not at capture time")
+        elif now_vars[name] != recorded_vars[name]:
             differences.append(f"environment variable {name} differs from the recorded value")
     return differences
 

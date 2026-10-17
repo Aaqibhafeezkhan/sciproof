@@ -237,6 +237,28 @@ def test_environment_difference_is_reported_and_strict_mode_is_inconclusive(proj
     assert project.runs() == runs  # strict mode stops before executing
 
 
+def test_env_var_set_now_but_not_at_capture_is_an_environment_difference(project, monkeypatch):
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    project.capture()
+    monkeypatch.setenv("OMP_NUM_THREADS", "8")
+
+    lenient = verify(project.manifest, rerun=True, assume_yes=True)
+    assert any("OMP_NUM_THREADS is set now" in w for w in lenient.warnings)
+
+    runs = project.runs()
+    strict = verify(project.manifest, rerun=True, assume_yes=True, strict_env=True)
+    assert strict.status is Status.INCONCLUSIVE
+    assert project.runs() == runs  # strict mode stops before executing
+
+
+def test_env_var_set_at_capture_but_not_now_is_an_environment_difference(project, monkeypatch):
+    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+    project.capture()
+    monkeypatch.delenv("OMP_NUM_THREADS")
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    assert any("OMP_NUM_THREADS was set at capture time" in w for w in report.warnings)
+
+
 def test_missing_dependency_is_reported(project):
     project.capture()
     _edit_manifest(
