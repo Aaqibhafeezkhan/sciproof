@@ -19,7 +19,13 @@ from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, 
 from sciproof.errors import ConfirmationRequired, SciProofError
 from sciproof.inspect_manifest import inspect_file
 from sciproof.textutil import safe_text
-from sciproof.verify import DEFAULT_RERUN_TIMEOUT_SECONDS, Status, format_report, verify
+from sciproof.verify import (
+    DEFAULT_RERUN_TIMEOUT_SECONDS,
+    Status,
+    format_report,
+    format_report_json,
+    verify,
+)
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -133,6 +139,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="stop the rerun after this many seconds (default %(default)s)",
     )
 
+    ver.add_argument(
+        "--json",
+        action="store_true",
+        help="print the report as one JSON object (exit codes are unchanged)",
+    )
+
     ins = sub.add_parser("inspect", help="show a readable summary; never executes anything")
     ins.add_argument("manifest", type=Path)
     return parser
@@ -144,7 +156,7 @@ def _confirm(prompt: str) -> bool:
             "refusing to execute the recorded command: no terminal to ask for confirmation; "
             "re-run with --yes after reading the command (see 'sciproof inspect')"
         )
-    print(prompt)
+    print(prompt, file=sys.stderr)  # stderr keeps stdout clean for --json
     answer = input("\nExecute this command? Type 'yes' to continue: ")
     return answer.strip().lower() == "yes"
 
@@ -198,7 +210,7 @@ def _run_verify(args: argparse.Namespace) -> int:
         timeout=args.timeout,
         confirm=_confirm if args.rerun and not args.yes else None,
     )
-    print(format_report(report))
+    print(format_report_json(report) if args.json else format_report(report))
     return _STATUS_EXIT[report.status]
 
 

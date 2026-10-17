@@ -14,6 +14,7 @@ much weaker statement than reproducibility of a computation (see docs/CONCEPTS.m
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -472,6 +473,27 @@ def verify(
         "or platforms is not expected; agreement is not a proof of scientific correctness."
     )
     return report
+
+
+def report_to_dict(report: Report) -> dict[str, Any]:
+    """The report as plain data. Strings are not escaped here; ``json.dumps`` does that."""
+    return {
+        "name": report.name,
+        "result": report.status.value,
+        "rerun_requested": report.rerun_requested,
+        "checks": [
+            {"status": c.status.value, "subject": c.subject, "message": c.message}
+            for c in report.checks
+        ],
+        "warnings": list(report.warnings),
+        "notes": list(report.info),
+        "rerun_outputs_dir": report.rerun_outputs_dir,
+    }
+
+
+def format_report_json(report: Report) -> str:
+    """Machine-readable report. ``ensure_ascii`` keeps control characters escaped."""
+    return json.dumps(report_to_dict(report), indent=2)
 
 
 def format_report(report: Report) -> str:

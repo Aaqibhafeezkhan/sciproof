@@ -122,7 +122,7 @@ rerun are `INCONCLUSIVE`, never `PASS`.
 sciproof capture --name NAME [--input P]... [--output P]... [--output-numeric P]...
                  [--rtol X] [--atol Y] [--timeout S] [--max-log-bytes N]
                  [--force] [--allow-nonzero] -- COMMAND [ARGS...]
-sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--timeout S]
+sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--timeout S] [--json]
 sciproof inspect MANIFEST
 ```
 
@@ -132,6 +132,8 @@ sciproof inspect MANIFEST
 * Declared inputs must be read-only for the command; capture fails if the command changes one.
 * A command that exits with a nonzero status is still recorded (capture then exits with `1`
   unless `--allow-nonzero`).
+* `--json` prints the verification report as a single JSON object (same exit codes), for CI
+  and scripts. Prompts and errors go to stderr, so stdout stays valid JSON.
 * `--strict-env` makes a rerun `INCONCLUSIVE` (without executing) if Python version, platform
   or recorded package versions differ.
 
