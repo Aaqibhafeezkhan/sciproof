@@ -146,7 +146,8 @@ Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
 * A manifest contains a command and must be treated as untrusted. `inspect` and plain `verify`
   never execute it; `--rerun` runs it **with your permissions, unsandboxed**. Only rerun
   manifests you trust, ideally in a disposable VM or container. See [SECURITY.md](SECURITY.md).
-* Manifests are **not signed**: hashes detect changes, they do not stop someone who can rewrite
+* Manifests are **not signed** (a tested recipe using `ssh-keygen -Y` is in
+  [docs/DESIGN_SIGNING.md](docs/DESIGN_SIGNING.md)): hashes detect changes, they do not stop someone who can rewrite
   both manifest and files from fabricating consistent evidence.
 * Only declared files are tracked. Undeclared inputs, network, time and system libraries are
   invisible. SciProof reports environment differences but does not recreate environments.
