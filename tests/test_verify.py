@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 
 import pytest
@@ -147,6 +148,30 @@ def test_rerun_leaves_the_recorded_outputs_untouched(project, monkeypatch):
     rerun_copy = project.root / report.rerun_outputs_dir / "out" / "exact.txt"
     assert rerun_copy.read_text() == "exact-changed"
     assert verify(project.manifest).status is Status.PASS
+
+
+def test_rerun_removes_directories_it_created(project):
+    project.capture()
+    shutil.rmtree(project.root / "out")  # the outputs are gone, the rerun has to recreate them
+    verify(project.manifest, rerun=True, assume_yes=True)
+    assert not (project.root / "out").exists()  # no empty leftover directory
+
+
+def test_rerun_keeps_directories_that_existed_before(project):
+    project.capture()
+    (project.root / "out" / "extra.txt").write_text("unrelated")
+    verify(project.manifest, rerun=True, assume_yes=True)
+    assert (project.root / "out" / "extra.txt").read_text() == "unrelated"
+
+
+def test_two_reruns_in_the_same_second_use_different_directories(project):
+    project.capture()
+    first = verify(project.manifest, rerun=True, assume_yes=True)
+    second = verify(project.manifest, rerun=True, assume_yes=True)
+    assert first.rerun_outputs_dir and second.rerun_outputs_dir
+    assert first.rerun_outputs_dir != second.rerun_outputs_dir
+    assert (project.root / first.rerun_outputs_dir).is_dir()
+    assert (project.root / second.rerun_outputs_dir).is_dir()
 
 
 def test_rerun_detects_a_different_exact_output(project, monkeypatch):

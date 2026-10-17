@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from sciproof.environment import interpreter_info, platform_info, selected_env_vars
@@ -306,6 +306,10 @@ def _compare_rerun(
         )
 
 
+def _rerun_dir_name(stamp: str, counter: int) -> str:
+    return f".sciproof-rerun-{stamp}" + (f"-{counter}" if counter else "")
+
+
 def _rerun(
     base: Path,
     manifest: dict[str, Any],
@@ -317,6 +321,13 @@ def _rerun(
     output_paths = [item["path"] for item in manifest["outputs"]]
     backup_root = Path(tempfile.mkdtemp(prefix="sciproof-backup-"))
     had_original: set[str] = set()
+    # Directories that exist before the run must stay; ones the rerun creates are removed again.
+    preexisting_dirs = {
+        parent
+        for relative in output_paths
+        for parent in PurePosixPath(relative).parents
+        if str(parent) != "." and (base / parent).is_dir()
+    }
     try:
         for relative in output_paths:
             target = resolve_inside(base, relative)
@@ -353,17 +364,28 @@ def _rerun(
     finally:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         moved_to: Path | None = None
+        counter = 0
+        while (base / _rerun_dir_name(stamp, counter)).exists():
+            counter += 1  # two reruns within one second must not share a directory
         for relative in output_paths:
             target = resolve_inside(base, relative)
             if target.is_file():
                 if moved_to is None:
-                    moved_to = base / f".sciproof-rerun-{stamp}"
+                    moved_to = base / _rerun_dir_name(stamp, counter)
                 destination = moved_to / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(target), destination)
             if relative in had_original:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(backup_root / relative, target)
+        for relative in output_paths:
+            for parent in PurePosixPath(relative).parents:
+                if str(parent) == "." or parent in preexisting_dirs:
+                    continue
+                try:
+                    (base / parent).rmdir()  # only succeeds if the directory is empty
+                except OSError:
+                    break
         if moved_to is not None:
             report.rerun_outputs_dir = moved_to.name
         shutil.rmtree(backup_root, ignore_errors=True)
