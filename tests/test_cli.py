@@ -114,3 +114,61 @@ def test_runs_as_a_module(project):
         [sys.executable, "-m", "sciproof", "--version"], capture_output=True, text=True, check=True
     )
     assert __version__ in completed.stdout
+
+
+def _json_report(capsys):
+    return json.loads(capsys.readouterr().out)
+
+
+def test_verify_json_for_pass_fail_and_inconclusive(project, capsys):
+    cli.main(_capture_args())
+    capsys.readouterr()
+
+    assert cli.main(["verify", "exp.sciproof.json", "--json"]) == cli.EXIT_OK
+    report = _json_report(capsys)
+    assert report["result"] == "PASS"
+    assert report["name"] == "exp"
+    assert {"status", "subject", "message"} <= set(report["checks"][0])
+    assert report["rerun_requested"] is False
+
+    (project.root / "out" / "exact.txt").write_text("changed")
+    assert cli.main(["verify", "exp.sciproof.json", "--json"]) == cli.EXIT_FAIL
+    report = _json_report(capsys)
+    assert report["result"] == "FAIL"
+    assert any(c["status"] == "FAIL" for c in report["checks"])
+
+    (project.root / "out" / "exact.txt").write_text("exact-a")
+    (project.root / "data.json").unlink()
+    assert cli.main(["verify", "exp.sciproof.json", "--json"]) == cli.EXIT_INCONCLUSIVE
+    assert _json_report(capsys)["result"] == "INCONCLUSIVE"
+
+
+def test_verify_json_with_rerun_keeps_stdout_pure_json(project, capsys):
+    cli.main(_capture_args())
+    capsys.readouterr()
+    assert cli.main(["verify", "exp.sciproof.json", "--rerun", "--yes", "--json"]) == cli.EXIT_OK
+    report = _json_report(capsys)  # would raise if anything but JSON was printed
+    assert report["rerun_requested"] is True
+    assert report["rerun_outputs_dir"].startswith(".sciproof-rerun-")
+
+
+def test_verify_json_escapes_control_characters_from_the_manifest(project, capsys):
+    cli.main(_capture_args())
+    capsys.readouterr()
+    manifest = project.root / "exp.sciproof.json"
+    data = json.loads(manifest.read_text())
+    data["inputs"][0]["path"] = "missing-\x1b[31m-file.csv"
+    manifest.write_text(json.dumps(data))
+
+    cli.main(["verify", "exp.sciproof.json", "--json"])
+    raw = capsys.readouterr().out
+    assert "\x1b" not in raw
+    assert chr(92) + "u001b" in raw  # escaped by the JSON encoder
+    json.loads(raw)
+
+
+def test_verify_json_errors_still_go_to_stderr_with_exit_code_3(project, capsys):
+    assert cli.main(["verify", "nope.sciproof.json", "--json"]) == cli.EXIT_ERROR
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "manifest not found" in captured.err
