@@ -153,19 +153,18 @@ def test_verify_json_with_rerun_keeps_stdout_pure_json(project, capsys):
     assert report["rerun_outputs_dir"].startswith(".sciproof-rerun-")
 
 
-def test_verify_json_escapes_control_characters_from_the_manifest(project, capsys):
+def test_verify_json_stays_valid_json_for_special_characters_in_paths(project, capsys):
     cli.main(_capture_args())
     capsys.readouterr()
     manifest = project.root / "exp.sciproof.json"
     data = json.loads(manifest.read_text())
-    data["inputs"][0]["path"] = "missing-\x1b[31m-file.csv"
+    odd = 'missing "quoted" ' + chr(233) + chr(9731) + ".csv"
+    data["inputs"][0]["path"] = odd
     manifest.write_text(json.dumps(data))
 
     cli.main(["verify", "exp.sciproof.json", "--json"])
-    raw = capsys.readouterr().out
-    assert "\x1b" not in raw
-    assert chr(92) + "u001b" in raw  # escaped by the JSON encoder
-    json.loads(raw)
+    report = json.loads(capsys.readouterr().out)
+    assert any(odd in check["subject"] for check in report["checks"])
 
 
 def test_verify_json_errors_still_go_to_stderr_with_exit_code_3(project, capsys):

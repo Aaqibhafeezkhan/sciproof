@@ -154,6 +154,35 @@ def test_validate_relative_path_rejects_unsafe_values(value):
         validate_relative_path(value)
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "trail.",
+        "trail ",
+        "dir./file",
+        "...",
+        "a/ ",
+        "CON",
+        "nul",
+        "NUL.txt",
+        "out/COM1",
+        "aux.json",
+        "LPT9.csv",
+        "bad" + chr(1) + "name",
+    ],
+)
+def test_validate_relative_path_rejects_names_that_mean_something_else_on_windows(value):
+    with pytest.raises(UnsafePathError):
+        validate_relative_path(value)
+
+
+@pytest.mark.parametrize(
+    "value", ["console.txt", "com10", "auxiliary/nul-file", "a.b.c", "x/.hidden"]
+)
+def test_validate_relative_path_accepts_names_that_only_look_similar(value):
+    assert validate_relative_path(value) == value
+
+
 @pytest.mark.parametrize("value", ["a", "a/b.txt", "dir with space/f.csv", ".hidden/file"])
 def test_validate_relative_path_accepts_normal_values(value):
     assert validate_relative_path(value) == value
