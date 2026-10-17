@@ -1,0 +1,60 @@
+name: Publish
+
+# Publishing uses PyPI "trusted publishing" (OIDC): no API token is stored in this repository.
+# One-time setup, done by a maintainer on pypi.org / test.pypi.org (see docs/RELEASING.md):
+#   * a (pending) publisher for owner hayagrivai-labs, repository sciproof, workflow publish.yml
+#   * GitHub environments "pypi" and "testpypi" (add required reviewers to approve each release)
+
+on:
+  release:
+    types: [published]   # publishes to PyPI
+  workflow_dispatch:     # manual run: publishes to TestPyPI
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-pypi:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

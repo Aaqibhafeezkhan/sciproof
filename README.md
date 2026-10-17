@@ -1,14 +1,14 @@
 # SciProof
 
 [![CI](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml/badge.svg)](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hayagrivai-labs/sciproof/blob/main/LICENSE)
 
 Record a computational experiment once, then let anyone **check the evidence**: are the files
 unchanged, and does re-running the command give the recorded results, exactly or within a
 tolerance you declared?
 
 > **Status: alpha (0.1).** Small, local-first, offline, no runtime dependencies. The idea is
-> unproven with real users; see [the competitive analysis](docs/COMPETITIVE_ANALYSIS.md) for
+> unproven with real users; see [the competitive analysis](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/COMPETITIVE_ANALYSIS.md) for
 > how it overlaps with existing tools (DVC, ReproZip, Sumatra, MLflow, RO-Crate).
 
 ## The problem
@@ -28,7 +28,7 @@ can later verify it with an explicit verdict: `PASS`, `FAIL` or `INCONCLUSIVE`.
 | **Scientific validity** | **Is the result correct?** | **Not addressed. A reproducible result can still be wrong.** |
 
 Bitwise reproducibility across different hardware or platforms is **not** promised. Details in
-[docs/CONCEPTS.md](docs/CONCEPTS.md).
+[docs/CONCEPTS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/CONCEPTS.md).
 
 ## Install
 
@@ -116,7 +116,7 @@ Exit codes: `0` PASS, `1` FAIL, `2` INCONCLUSIVE, `3` usage error or invalid man
 input, a missing numeric snapshot, a command that cannot be started, a timeout or a declined
 rerun are `INCONCLUSIVE`, never `PASS`.
 
-A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/TUTORIAL_NUMPY_PANDAS.md](docs/TUTORIAL_NUMPY_PANDAS.md).
+A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/TUTORIAL_NUMPY_PANDAS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/TUTORIAL_NUMPY_PANDAS.md).
 
 ## Commands
 
@@ -139,15 +139,15 @@ sciproof inspect MANIFEST
 * `--strict-env` makes a rerun `INCONCLUSIVE` (without executing) if Python version, platform
   or recorded package versions differ.
 
-Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
+Manifest format: [docs/MANIFEST.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/MANIFEST.md).
 
 ## Threat model and limitations
 
 * A manifest contains a command and must be treated as untrusted. `inspect` and plain `verify`
   never execute it; `--rerun` runs it **with your permissions, unsandboxed**. Only rerun
-  manifests you trust, ideally in a disposable VM or container. See [SECURITY.md](SECURITY.md).
+  manifests you trust, ideally in a disposable VM or container. See [SECURITY.md](https://github.com/hayagrivai-labs/sciproof/blob/main/SECURITY.md).
 * Manifests are **not signed** (a tested recipe using `ssh-keygen -Y` is in
-  [docs/DESIGN_SIGNING.md](docs/DESIGN_SIGNING.md)): hashes detect changes, they do not stop someone who can rewrite
+  [docs/DESIGN_SIGNING.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/DESIGN_SIGNING.md)): hashes detect changes, they do not stop someone who can rewrite
   both manifest and files from fabricating consistent evidence.
 * Only declared files are tracked. Undeclared inputs, network, time and system libraries are
   invisible. SciProof reports environment differences but does not recreate environments.
@@ -168,9 +168,9 @@ Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
 | [ReproZip](https://docs.reprozip.org/en/1.x/) | Packs a Linux experiment with its files and dependencies so it can be rerun elsewhere. SciProof does not package anything. |
 | [Sumatra](https://sumatra.readthedocs.io/en/latest/introduction.html) | Electronic-lab-notebook style run records. |
 | [MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/) | Experiment tracking for ML with parameters and metrics, optional UI. |
-| [RO-Crate](https://www.researchobject.org/ro-crate/specification/1.1/introduction.html) | A standard to *describe* research outputs; does not verify them. Mapping study: [docs/DESIGN_RO_CRATE.md](docs/DESIGN_RO_CRATE.md). |
+| [RO-Crate](https://www.researchobject.org/ro-crate/specification/1.1/introduction.html) | A standard to *describe* research outputs; does not verify them. Mapping study: [docs/DESIGN_RO_CRATE.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/DESIGN_RO_CRATE.md). |
 
-Full analysis, with what could not be confirmed: [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md).
+Full analysis, with what could not be confirmed: [docs/COMPETITIVE_ANALYSIS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/COMPETITIVE_ANALYSIS.md).
 
 ## Roadmap (decided by feedback, not by speculation)
 
@@ -183,10 +183,10 @@ Nothing below is promised. Each item is only worth doing if real users ask for i
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Quick checks: `ruff check .`, `ruff format --check .`,
+See [CONTRIBUTING.md](https://github.com/hayagrivai-labs/sciproof/blob/main/CONTRIBUTING.md). Quick checks: `ruff check .`, `ruff format --check .`,
 `python -m pytest`, `python examples/demo.py`.
 
 ## Licence
 
-[MIT](LICENSE): short and permissive, so researchers and companies can use and embed it
+[MIT](https://github.com/hayagrivai-labs/sciproof/blob/main/LICENSE): short and permissive, so researchers and companies can use and embed it
 without legal review.
