@@ -1,0 +1,7 @@
+{
+  "seed": 20260101,
+  "n_points": 200,
+  "slope": 2.5,
+  "intercept": -1.0,
+  "noise": 0.8
+}
