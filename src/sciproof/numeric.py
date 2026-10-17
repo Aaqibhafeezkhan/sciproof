@@ -8,6 +8,7 @@ equal exactly. Two NaNs compare equal; infinities must match in sign.
 from __future__ import annotations
 
 import csv
+import io
 import json
 import math
 from pathlib import Path
@@ -62,18 +63,26 @@ def load_numeric(path: Path) -> list[Leaf]:
         return leaves
 
     try:
-        rows = list(csv.reader(text.splitlines()))
+        # newline="" lets the csv module handle line breaks inside quoted fields (and CRLF)
+        rows = list(csv.reader(io.StringIO(text, newline="")))
     except csv.Error as exc:
         raise NumericFormatError(f"{path.name} is not valid CSV: {exc}") from exc
     leaves.append(("rows", len(rows)))
     for r, row in enumerate(rows):
         leaves.append((f"row{r}#cols", len(row)))
         for c, cell in enumerate(row):
-            try:
-                leaves.append((f"r{r}c{c}", float(cell)))
-            except ValueError:
-                leaves.append((f"r{r}c{c}", cell))
+            leaves.append((f"r{r}c{c}", _parse_cell(cell)))
     return leaves
+
+
+def _parse_cell(cell: str) -> object:
+    """A CSV cell is a number if float() accepts it; ``1_000`` (digit separators) is text."""
+    if "_" in cell:
+        return cell
+    try:
+        return float(cell)
+    except ValueError:
+        return cell
 
 
 def _is_number(value: object) -> bool:
@@ -102,7 +111,11 @@ def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) 
         if loc_e != loc_a:
             note(f"structure differs at {loc_e}: found {loc_a} instead")
             break
-        if _is_number(val_e) and _is_number(val_a):
+        if isinstance(val_e, int) and isinstance(val_a, int) and not isinstance(val_e, bool):
+            # Python ints are exact; going through float would hide differences above 2**53.
+            different = val_e != val_a
+            detail = ""
+        elif _is_number(val_e) and _is_number(val_a):
             different = not _numbers_close(float(val_e), float(val_a), rtol, atol)  # type: ignore[arg-type]
             detail = f" (rtol={rtol}, atol={atol})"
         else:
