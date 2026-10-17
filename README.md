@@ -1,5 +1,8 @@
 # SciProof
 
+[![CI](https://github.com/alok-108/sciproof/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-108/sciproof/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Record a computational experiment once, then let anyone **check the evidence**: are the files
 unchanged, and does re-running the command give the recorded results, exactly or within a
 tolerance you declared?
@@ -147,7 +150,7 @@ Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
 * Numeric comparison supports `.json` and `.csv` only (plain stdlib parsing).
 * The environment is probed from the command's interpreter only if the command is a Python
   interpreter; otherwise the interpreter running SciProof is described (and the manifest says so).
-* Windows and Linux are tested in CI; macOS is expected to work but is not tested.
+* Windows and Linux are tested in CI (Python 3.11-3.13); macOS is expected to work but is not tested yet (good first issue #4).
 * The unit tests that check symlink escapes need symlink support (they run in Linux CI and are
   skipped where symlinks are unavailable).
 
