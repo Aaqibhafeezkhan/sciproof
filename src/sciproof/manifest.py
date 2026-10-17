@@ -57,6 +57,11 @@ def _as_dict(value: Any, where: str) -> dict[str, Any]:
     return value
 
 
+def _size(obj: dict[str, Any], where: str) -> None:
+    if _get(obj, "size", int, where) < 0:
+        raise _fail(f"{where}.size", "expected a size >= 0")
+
+
 def _sha(value: Any, where: str) -> str:
     if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
         raise _fail(where, "expected a lowercase 64-character hex SHA-256 digest")
@@ -81,7 +86,7 @@ def _finite_nonneg(value: Any, where: str) -> float:
 def _validate_stream(stream: Any, where: str) -> None:
     stream = _as_dict(stream, where)
     _sha(stream.get("sha256"), f"{where}.sha256")
-    _get(stream, "size", int, where)
+    _size(stream, where)
     _get(stream, "truncated", bool, where)
     _get(stream, "text", str, where)
 
@@ -143,7 +148,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
             raise _fail(f"{where}.path", f"duplicate path {path!r}")
         seen.add(path)
         _sha(item.get("sha256"), f"{where}.sha256")
-        _get(item, "size", int, where)
+        _size(item, where)
 
     execution = _as_dict(_get(manifest, "execution", dict, "manifest"), "execution")
     _get(execution, "exit_code", int, "execution")
@@ -162,7 +167,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         present = _get(item, "present", bool, where)
         if present:
             _sha(item.get("sha256"), f"{where}.sha256")
-            _get(item, "size", int, where)
+            _size(item, where)
         elif item.get("sha256") is not None:
             raise _fail(f"{where}.sha256", "must be null when the output is not present")
         compare = _as_dict(_get(item, "compare", dict, where), f"{where}.compare")
