@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import shutil
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -94,8 +95,12 @@ def capture(
         )
     if not argv or not argv[0]:
         raise CaptureError("no command given")
-    if rtol < 0 or atol < 0:
-        raise CaptureError("rtol and atol must not be negative")
+    if not (math.isfinite(rtol) and math.isfinite(atol)) or rtol < 0 or atol < 0:
+        raise CaptureError("rtol and atol must be finite numbers that are not negative")
+    if timeout is not None and not (math.isfinite(timeout) and timeout > 0):
+        raise CaptureError("timeout must be a positive number of seconds")
+    if max_log_bytes < 0:
+        raise CaptureError("max-log-bytes must not be negative")
     base = base.resolve()
 
     try:

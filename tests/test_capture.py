@@ -183,9 +183,24 @@ def test_log_output_is_truncated_but_fully_hashed(project):
     assert stdout["size"] == 5001 + (1 if sys.platform == "win32" else 0)
 
 
-def test_capture_cannot_be_called_with_negative_tolerance(project):
-    with pytest.raises(CaptureError, match="must not be negative"):
-        project.capture(rtol=-1)
+@pytest.mark.parametrize(
+    "options, message",
+    [
+        ({"rtol": -1}, "not negative"),
+        ({"atol": -1e-9}, "not negative"),
+        ({"rtol": float("nan")}, "finite"),
+        ({"atol": float("inf")}, "finite"),
+        ({"timeout": 0}, "timeout"),
+        ({"timeout": -3}, "timeout"),
+        ({"timeout": float("nan")}, "timeout"),
+        ({"max_log_bytes": -5}, "max-log-bytes"),
+    ],
+)
+def test_invalid_options_are_rejected_before_the_command_runs(project, options, message):
+    with pytest.raises(CaptureError, match=message):
+        project.capture(**options)
+    assert project.runs() == 0
+    assert not project.manifest.exists()
 
 
 def test_capture_function_is_usable_without_the_cli(project):
