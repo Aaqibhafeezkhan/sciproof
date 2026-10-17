@@ -141,6 +141,16 @@ def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> lis
     return messages
 
 
+def _is_exact_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _short(value: object, limit: int = 60) -> str:
+    """repr() of a value, shortened so that a huge integer cannot flood the report."""
+    text = repr(value)
+    return text if len(text) <= limit else f"{text[:limit]}... ({len(text)} characters)"
+
+
 def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -173,17 +183,20 @@ def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) 
             ):  # same shape and dtype
                 differences.extend(_compare_arrays(val_e, val_a, rtol, atol))
             continue
-        if isinstance(val_e, int) and isinstance(val_a, int) and not isinstance(val_e, bool):
+        if _is_exact_int(val_e) and _is_exact_int(val_a):
             # Python ints are exact; going through float would hide differences above 2**53.
             different = val_e != val_a
             detail = ""
         elif _is_number(val_e) and _is_number(val_a):
-            different = not _numbers_close(float(val_e), float(val_a), rtol, atol)  # type: ignore[arg-type]
+            try:
+                different = not _numbers_close(float(val_e), float(val_a), rtol, atol)  # type: ignore[arg-type]
+            except OverflowError:  # an integer beyond the float range cannot match a float
+                different = True
             detail = f" (rtol={rtol}, atol={atol})"
         else:
             # True == 1 in Python, but a boolean is not a number in the data
             different = type(val_e) is not type(val_a) or val_e != val_a
             detail = ""
-        if different and note(f"{loc_e}: recorded {val_e!r}, found {val_a!r}{detail}"):
+        if different and note(f"{loc_e}: recorded {_short(val_e)}, found {_short(val_a)}{detail}"):
             break
     return differences

@@ -121,3 +121,32 @@ def test_csv_cells_with_digit_separators_are_text(tmp_path):
     (tmp_path / "b.csv").write_text("v\n1000\n")
     a, b = load_numeric(tmp_path / "a.csv"), load_numeric(tmp_path / "b.csv")
     assert compare(a, b, 1.0, 1.0) != []
+
+
+def test_huge_integers_do_not_crash_the_comparison(tmp_path):
+    huge = 10**400
+    a = _json(tmp_path / "a.json", {"x": huge})
+    same = _json(tmp_path / "b.json", {"x": huge})
+    off_by_one = _json(tmp_path / "c.json", {"x": huge + 1})
+    as_float = _json(tmp_path / "d.json", {"x": 1.5})
+    assert compare(a, same, 1e-9, 0.0) == []
+    assert compare(a, off_by_one, 1e-9, 0.0) != []
+    assert compare(a, as_float, 1e-9, 0.0) != []  # used to raise OverflowError
+    assert compare(as_float, a, 1e-9, 0.0) != []
+
+
+def test_huge_integers_are_shortened_in_messages(tmp_path):
+    a = _json(tmp_path / "a.json", {"x": 10**400})
+    b = _json(tmp_path / "b.json", {"x": 10**400 + 1})
+    (message,) = compare(a, b, 0.0, 0.0)
+    assert len(message) < 300 and "characters" in message
+
+
+def test_a_number_is_never_equal_to_a_boolean_in_either_direction(tmp_path):
+    number = _json(tmp_path / "a.json", {"x": 1})
+    flag = _json(tmp_path / "b.json", {"x": True})
+    assert compare(number, flag, 1.0, 1.0) != []
+    assert compare(flag, number, 1.0, 1.0) != []
+    zero = _json(tmp_path / "c.json", {"x": 0})
+    no = _json(tmp_path / "d.json", {"x": False})
+    assert compare(zero, no, 1.0, 1.0) != []

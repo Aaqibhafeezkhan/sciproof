@@ -315,3 +315,15 @@ def test_invalid_rerun_timeout_is_a_clean_error_and_runs_nothing(project, timeou
     with pytest.raises(UsageError, match="timeout"):
         verify(project.manifest, rerun=True, assume_yes=True, timeout=timeout)
     assert project.runs() == runs
+
+
+def test_rerun_with_a_huge_json_integer_gives_a_verdict_not_a_traceback(project):
+    code = "open('big.json', 'w').write('{\"x\": 1' + '0' * 400 + '}')"
+    project.capture(
+        argv=[sys.executable, "-c", code],
+        inputs=["data.json"],
+        outputs=[],
+        numeric_outputs=["big.json"],
+    )
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    assert report.status is Status.PASS
