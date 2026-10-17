@@ -12,12 +12,14 @@ import io
 import json
 import math
 from pathlib import Path
+from typing import Any
 
 from sciproof.errors import SciProofError
 
 MAX_NUMERIC_FILE_BYTES = 64 * 1024 * 1024
 MAX_REPORTED_DIFFERENCES = 10
-SUPPORTED_SUFFIXES = (".json", ".csv")
+SUPPORTED_SUFFIXES = (".json", ".csv", ".npy")
+NUMPY_KINDS = "biufc"  # bool, int, unsigned, float, complex
 
 Leaf = tuple[str, object]
 
@@ -40,7 +42,7 @@ def _flatten_json(value: object, path: str, out: list[Leaf]) -> None:
 
 
 def load_numeric(path: Path) -> list[Leaf]:
-    """Parse a ``.json`` or ``.csv`` file into a flat list of ``(location, value)`` pairs."""
+    """Parse a ``.json``, ``.csv`` or ``.npy`` file into ``(location, value)`` pairs."""
     suffix = path.suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
         raise NumericFormatError(
@@ -50,6 +52,11 @@ def load_numeric(path: Path) -> list[Leaf]:
         size = path.stat().st_size
         if size > MAX_NUMERIC_FILE_BYTES:
             raise NumericFormatError(f"{path.name} is larger than the numeric comparison limit")
+    except OSError as exc:
+        raise NumericFormatError(f"cannot read {path.name}: {exc}") from exc
+    if suffix == ".npy":
+        return _load_npy(path)
+    try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         raise NumericFormatError(f"cannot read {path.name} as UTF-8 text: {exc}") from exc
@@ -85,6 +92,55 @@ def _parse_cell(cell: str) -> object:
         return cell
 
 
+def _load_npy(path: Path) -> list[Leaf]:
+    """Load a NumPy ``.npy`` file (needs the optional NumPy extra; pickle is never allowed)."""
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise NumericFormatError(
+            f"comparing {path.name} needs NumPy: pip install 'sciproof[numpy]'"
+        ) from exc
+    try:
+        array = np.load(path, allow_pickle=False)
+    except (ValueError, OSError, EOFError) as exc:
+        raise NumericFormatError(f"{path.name} is not a plain .npy array: {exc}") from exc
+    if not isinstance(array, np.ndarray) or array.dtype.kind not in NUMPY_KINDS:
+        raise NumericFormatError(
+            f"{path.name}: only numeric, boolean and complex arrays are supported "
+            f"(dtype {getattr(array, 'dtype', type(array).__name__)})"
+        )
+    return [("shape", list(array.shape)), ("dtype", str(array.dtype)), ("data", array)]
+
+
+def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> list[str]:
+    """Element-wise comparison of two equally shaped arrays with the scalar rule of ``compare``."""
+    import numpy as np
+
+    if expected.dtype.kind in "biu" and actual.dtype.kind in "biu":
+        bad = expected != actual  # integers and booleans are compared exactly
+    else:
+        with np.errstate(all="ignore"):
+            both_nan = np.isnan(expected) & np.isnan(actual)
+            same_inf = np.isinf(expected) & (expected == actual)
+            finite = np.isfinite(expected) & np.isfinite(actual)
+            tolerance = np.maximum(rtol * np.maximum(np.abs(expected), np.abs(actual)), atol)
+            close = finite & (np.abs(expected - actual) <= tolerance)
+        bad = ~(both_nan | same_inf | close)
+    count = int(bad.sum())
+    if not count:
+        return []
+    messages = []
+    for index in np.argwhere(bad)[:MAX_REPORTED_DIFFERENCES]:
+        key = tuple(int(i) for i in index)
+        messages.append(
+            f"data{list(key)}: recorded {expected[key]!r}, found {actual[key]!r} "
+            f"(rtol={rtol}, atol={atol})"
+        )
+    if count > len(messages):
+        messages.append(f"... {count} of {bad.size} values differ")
+    return messages
+
+
 def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -111,6 +167,12 @@ def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) 
         if loc_e != loc_a:
             note(f"structure differs at {loc_e}: found {loc_a} instead")
             break
+        if loc_e == "data" and hasattr(val_e, "shape"):
+            if (
+                expected[0][1] == actual[0][1] and expected[1][1] == actual[1][1]
+            ):  # same shape and dtype
+                differences.extend(_compare_arrays(val_e, val_a, rtol, atol))
+            continue
         if isinstance(val_e, int) and isinstance(val_a, int) and not isinstance(val_e, bool):
             # Python ints are exact; going through float would hide differences above 2**53.
             different = val_e != val_a

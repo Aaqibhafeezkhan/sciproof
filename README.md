@@ -24,7 +24,7 @@ can later verify it with an explicit verdict: `PASS`, `FAIL` or `INCONCLUSIVE`.
 | --- | --- | --- |
 | Integrity | Are the files what was recorded? | SHA-256 checks |
 | Execution reproducibility | Does the command still produce the recorded results? | opt-in rerun; environment *differences are reported*, not fixed |
-| Numerical equivalence | Equal within a declared tolerance? | `--output-numeric` with `rtol`/`atol` for `.json`/`.csv` |
+| Numerical equivalence | Equal within a declared tolerance? | `--output-numeric` with `rtol`/`atol` for `.json`, `.csv` and (with NumPy) `.npy` |
 | **Scientific validity** | **Is the result correct?** | **Not addressed. A reproducible result can still be wrong.** |
 
 Bitwise reproducibility across different hardware or platforms is **not** promised. Details in
@@ -151,7 +151,8 @@ Manifest format: [docs/MANIFEST.md](docs/MANIFEST.md).
 * Only declared files are tracked. Undeclared inputs, network, time and system libraries are
   invisible. SciProof reports environment differences but does not recreate environments.
 * stdout/stderr and the command line are stored in the manifest; review them for secrets.
-* Numeric comparison supports `.json` and `.csv` only (plain stdlib parsing).
+* Numeric comparison supports `.json` and `.csv` (standard library only) and `.npy` arrays
+  (`pip install 'sciproof[numpy]'`; numeric, boolean and complex dtypes, never unpickled).
 * The environment is probed from the command's interpreter only if the command is a Python
   interpreter; otherwise the interpreter running SciProof is described (and the manifest says so).
 * Windows and Linux are tested in CI (Python 3.11-3.13); macOS is expected to work but is not tested yet (good first issue #4).
@@ -175,8 +176,8 @@ Full analysis, with what could not be confirmed: [docs/COMPETITIVE_ANALYSIS.md](
 Nothing below is promised. Each item is only worth doing if real users ask for it:
 
 1. Try it on real experiments of a few researchers; record what is awkward or missing.
-2. Based on that: more numeric formats (for example `.npy`), directory outputs, or a manifest
-   export to RO-Crate for interoperability.
+2. Based on that: more numeric formats (for example `.npz`), directory outputs, or a manifest export to RO-Crate
+   for interoperability.
 3. Signing or timestamping of manifests, if integrity against a hostile party matters to users.
 
 ## Contributing
