@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from sciproof.capture import capture
+from sciproof.environment import ENV_ALLOWLIST
 from sciproof.errors import CaptureError
 from sciproof.manifest import load_manifest
 from sciproof.runner import CommandInterrupted, run_command
@@ -38,6 +39,8 @@ def test_manifest_uses_relative_paths_and_no_absolute_directories(project):
 
 
 def test_secrets_in_the_environment_are_not_recorded(project, monkeypatch):
+    for name in ENV_ALLOWLIST:  # the runner may define some of them (for example LANG)
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("MY_SECRET_TOKEN", "hunter2-super-secret")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "abcd-secret-key")
     monkeypatch.setenv("TZ", "UTC")
