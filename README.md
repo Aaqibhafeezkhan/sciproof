@@ -1,6 +1,6 @@
 # SciProof
 
-[![CI](https://github.com/alok-108/sciproof/actions/workflows/ci.yml/badge.svg)](https://github.com/alok-108/sciproof/actions/workflows/ci.yml)
+[![CI](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml/badge.svg)](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Record a computational experiment once, then let anyone **check the evidence**: are the files
@@ -33,7 +33,7 @@ Bitwise reproducibility across different hardware or platforms is **not** promis
 ## Install
 
 ```bash
-git clone https://github.com/alok-108/sciproof.git && cd sciproof
+git clone https://github.com/hayagrivai-labs/sciproof.git && cd sciproof
 python -m pip install -e .          # Python 3.11+
 sciproof --version
 ```
