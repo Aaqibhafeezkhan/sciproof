@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 
@@ -172,3 +173,23 @@ def test_verify_json_errors_still_go_to_stderr_with_exit_code_3(project, capsys)
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "manifest not found" in captured.err
+
+
+def test_inspect_and_verify_do_not_crash_on_an_unencodable_terminal(project, monkeypatch):
+    """A manifest with non-ASCII log text must be printable on an ASCII-only console."""
+    monkeypatch.setenv("PYTHONIOENCODING", "utf-8")  # let the captured command print Unicode
+    command = [sys.executable, "-c", "print('caf\u00e9 \u2713')"]
+    code = cli.main(["capture", "--name", "uni", "--input", "data.json", "--", *command])
+    assert code == cli.EXIT_OK
+
+    env = {**os.environ, "PYTHONIOENCODING": "ascii"}
+    for args in (["inspect"], ["verify"]):
+        completed = subprocess.run(
+            [sys.executable, "-m", "sciproof", *args, "uni.sciproof.json"],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=project.root,
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert "Traceback" not in completed.stderr

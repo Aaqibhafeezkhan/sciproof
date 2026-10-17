@@ -214,7 +214,21 @@ def _run_verify(args: argparse.Namespace) -> int:
     return _STATUS_EXIT[report.status]
 
 
+def _make_output_robust() -> None:
+    """Never crash because the terminal cannot encode a character from a manifest or a log.
+
+    Captured stdout/stderr and file names can contain any character, while a console may use
+    a narrow encoding (for example cp1252 on Windows). Unencodable characters are printed as
+    escapes (``\u2713``) instead of raising ``UnicodeEncodeError``.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="backslashreplace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _make_output_robust()
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:
