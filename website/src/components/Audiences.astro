@@ -1,0 +1,49 @@
+---
+import { BASE } from '../../site.config.mjs';
+// Short scenarios. They are illustrations of how the documented features fit a situation,
+// not testimonials: nobody is quoted and no adoption is claimed.
+const people = [
+  {
+    who: 'PhD students',
+    text: 'Before submitting, capture the script that produced a figure and keep the manifest with the thesis repository. Months later, `sciproof verify` tells you whether the data and outputs are still the ones you reported, and `--rerun` whether the figure still comes out of the same command.',
+    link: 'docs/getting-started/',
+    label: 'Getting started',
+  },
+  {
+    who: 'Reviewers and artifact evaluators',
+    text: 'Given a manifest, run `sciproof inspect` first: it shows the command, environment and hashes without executing anything. Re-run only if you trust the command, ideally in a disposable VM, and read the verdict, including what was not checked.',
+    link: 'docs/security/',
+    label: 'Threat model',
+  },
+  {
+    who: 'ML engineers',
+    text: 'Declare model metrics as numeric outputs with an explicit `rtol`/`atol`, so a re-run on slightly different numerics is judged by a tolerance you wrote down, and an unrelated change shows up as a FAIL instead of a shrug.',
+    link: 'docs/tutorial-numpy-pandas/',
+    label: 'NumPy & pandas tutorial',
+  },
+  {
+    who: 'CI pipelines',
+    text: 'A job can run `sciproof verify --json` and fail on exit code 1 (FAIL) or 2 (INCONCLUSIVE). Integrity checks execute nothing; re-execution belongs only in trusted pipelines.',
+    link: 'docs/ci/',
+    label: 'Using SciProof in CI',
+  },
+];
+---
+
+<section class="lp-section" id="who">
+  <div class="lp-wrap">
+    <h2>Who it helps</h2>
+    <p class="lp-lead">Scenarios, not testimonials: SciProof is new and has no public users to quote yet.</p>
+    <div class="lp-grid">
+      {
+        people.map((p) => (
+          <article class="lp-card">
+            <h3>{p.who}</h3>
+            <p set:html={p.text.replace(/`([^`]+)`/g, '<code>$1</code>')} />
+            <p><a href={`${BASE}/${p.link}`}>{p.label} →</a></p>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>

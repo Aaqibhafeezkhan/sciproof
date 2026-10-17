@@ -1,0 +1,46 @@
+---
+import install from '../data/install.json';
+import { BASE, REPO_URL } from '../../site.config.mjs';
+---
+
+<section class="lp-hero">
+  <div class="lp-wrap">
+    <h1>Record an experiment once. <em>Let anyone check the evidence.</em></h1>
+    <p>
+      SciProof records a command, its inputs, outputs and environment in one JSON manifest, and later
+      verifies it with an explicit verdict: <span class="lp-chip pass">PASS</span>
+      <span class="lp-chip fail">FAIL</span> or <span class="lp-chip inc">INCONCLUSIVE</span>.
+      Local-first, offline, no runtime dependencies.
+    </p>
+    <div class="lp-install">
+      <code id="install-cmd" tabindex="0" aria-label="Install command">{install.command}</code>
+      <button type="button" id="copy-install" aria-live="polite">Copy</button>
+    </div>
+    {install.note && <p class="lp-note">{install.note}</p>}
+    <div class="lp-actions">
+      <a class="lp-btn lp-btn-primary" href={`${BASE}/docs/getting-started/`}>Get started</a>
+      <a class="lp-btn lp-btn-secondary" href={REPO_URL}>GitHub</a>
+    </div>
+    <p class="lp-note">Alpha software. The idea is unproven with real users; the docs say so openly.</p>
+  </div>
+</section>
+
+<script>
+  const button = document.getElementById('copy-install');
+  const code = document.getElementById('install-cmd');
+  button?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(code?.textContent ?? '');
+      button.textContent = 'Copied';
+    } catch {
+      // clipboard blocked: select the text so the visitor can copy it by hand
+      const range = document.createRange();
+      if (code) range.selectNodeContents(code);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      button.textContent = 'Press Ctrl+C';
+    }
+    setTimeout(() => (button.textContent = 'Copy'), 2000);
+  });
+</script>

@@ -1,0 +1,16 @@
+---
+// Starlight override: keeps the default footer (edit link, last updated, pagination) and adds
+// the "Report a problem with this page" link that pre-fills the website issue form.
+import Default from '@astrojs/starlight/components/Footer.astro';
+import { REPO_URL } from '../../site.config.mjs';
+
+const pageUrl = Astro.url.href;
+const reportUrl = `${REPO_URL}/issues/new?template=website.yml&page-url=${encodeURIComponent(pageUrl)}`;
+---
+
+<Default {...Astro.props}><slot /></Default>
+<p class="sp-footer-note">
+  <a class="sp-report-link" href={reportUrl} rel="noopener">Report a problem with this page</a>
+  · Licence: <a href={`${REPO_URL}/blob/main/LICENSE`}>MIT</a>
+  · <a href={REPO_URL}>GitHub</a>
+</p>

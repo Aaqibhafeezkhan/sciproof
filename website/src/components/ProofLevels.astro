@@ -1,0 +1,35 @@
+---
+import landing from '../data/landing.json';
+import { BASE } from '../../site.config.mjs';
+---
+
+<section class="lp-section" id="proves">
+  <div class="lp-wrap">
+    <h2>What it proves, and what it does not</h2>
+    <p class="lp-lead" set:html={landing.problem}>
+    </p>
+    <div class="lp-table-wrap">
+      <table class="lp-table">
+        <caption>The four levels of “reproducible”, from the README.</caption>
+        <thead>
+          <tr><th scope="col">Level</th><th scope="col">Question</th><th scope="col">SciProof</th></tr>
+        </thead>
+        <tbody>
+          {
+            landing.levels.map((row) => (
+              <tr class={row.notAddressed ? 'no' : ''}>
+                <th scope="row" set:html={row.level} />
+                <td set:html={row.question} />
+                <td set:html={row.how} />
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="lp-note">
+      Bitwise reproducibility across different hardware or platforms is not promised. A <span class="lp-chip pass">PASS</span> never
+      means the science is right. More in <a href={`${BASE}/docs/concepts/`}>Concepts</a>.
+    </p>
+  </div>
+</section>

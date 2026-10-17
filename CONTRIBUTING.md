@@ -21,7 +21,7 @@ python -m pytest
 python examples/demo.py
 ```
 
-CI runs the same on Python 3.11, 3.12 and 3.13 on Linux and Windows.
+CI runs the same on Python 3.11, 3.12 and 3.13 on Linux, Windows and macOS.
 
 ## Guidelines
 

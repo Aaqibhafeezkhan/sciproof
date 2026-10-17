@@ -1,0 +1,120 @@
+/*
+ * Shared design tokens for the landing page and the Starlight docs.
+ *
+ * Status colours are used the same way everywhere: PASS green, FAIL red, INCONCLUSIVE amber.
+ * Text colours were chosen to meet WCAG AA (4.5:1) on the page backgrounds below.
+ */
+
+:root {
+  --sp-font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --sp-font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* dark (default, same default as Starlight) */
+  --sp-bg: #0d1411;
+  --sp-bg-raised: #131d18;
+  --sp-bg-sunken: #0a0f0d;
+  --sp-border: #26362e;
+  --sp-text: #e7eee9;
+  --sp-text-muted: #a3b4aa;
+  --sp-accent: #3fcf8e;
+  --sp-accent-contrast: #06130d;
+  --sp-pass: #46d391;
+  --sp-fail: #ff8077;
+  --sp-warn: #f4bd52;
+  --sp-pass-bg: rgb(70 211 145 / 0.12);
+  --sp-fail-bg: rgb(255 128 119 / 0.12);
+  --sp-warn-bg: rgb(244 189 82 / 0.12);
+  --sp-term-bg: #08100c;
+  --sp-term-text: #d7e4dc;
+  --sp-focus: #7fe3b4;
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --sp-bg: #fbfaf6;
+  --sp-bg-raised: #ffffff;
+  --sp-bg-sunken: #f1efe8;
+  --sp-border: #d9d6ca;
+  --sp-text: #18221d;
+  --sp-text-muted: #4c5b53;
+  --sp-accent: #146c47;
+  --sp-accent-contrast: #ffffff;
+  --sp-pass: #11663f;
+  --sp-fail: #b3261e;
+  --sp-warn: #84540a;
+  --sp-pass-bg: rgb(17 102 63 / 0.1);
+  --sp-fail-bg: rgb(179 38 30 / 0.09);
+  --sp-warn-bg: rgb(132 84 10 / 0.1);
+  --sp-term-bg: #12201a;
+  --sp-term-text: #dbe8e0;
+  --sp-focus: #146c47;
+  color-scheme: light;
+}
+
+/* Same light palette for visitors whose system prefers light and who have not chosen a theme */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --sp-bg: #fbfaf6;
+    --sp-bg-raised: #ffffff;
+    --sp-bg-sunken: #f1efe8;
+    --sp-border: #d9d6ca;
+    --sp-text: #18221d;
+    --sp-text-muted: #4c5b53;
+    --sp-accent: #146c47;
+    --sp-accent-contrast: #ffffff;
+    --sp-pass: #11663f;
+    --sp-fail: #b3261e;
+    --sp-warn: #84540a;
+    --sp-pass-bg: rgb(17 102 63 / 0.1);
+    --sp-fail-bg: rgb(179 38 30 / 0.09);
+    --sp-warn-bg: rgb(132 84 10 / 0.1);
+    --sp-term-bg: #12201a;
+    --sp-term-text: #dbe8e0;
+    --sp-focus: #146c47;
+    color-scheme: light;
+  }
+}
+
+/* Starlight mapping */
+:root {
+  --sl-font: var(--sp-font-sans);
+  --sl-font-mono: var(--sp-font-mono);
+}
+:root,
+:root[data-theme='light'] {
+  --sl-color-accent: var(--sp-accent);
+}
+:root {
+  --sl-color-accent-high: var(--sp-accent);
+  --sl-color-accent-low: var(--sp-pass-bg);
+}
+:root[data-theme='light'] {
+  --sl-color-accent-high: var(--sp-accent);
+  --sl-color-accent-low: var(--sp-pass-bg);
+  --sl-color-bg: var(--sp-bg);
+  --sl-color-bg-nav: var(--sp-bg-raised);
+  --sl-color-bg-sidebar: var(--sp-bg-raised);
+  --sl-color-text-accent: var(--sp-accent);
+}
+
+/* Verdict words, reused by the landing page, the docs and the generated pages */
+.sp-pass {
+  color: var(--sp-pass);
+}
+.sp-fail {
+  color: var(--sp-fail);
+}
+.sp-inc {
+  color: var(--sp-warn);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

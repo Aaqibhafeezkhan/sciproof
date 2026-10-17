@@ -1,0 +1,160 @@
+name: Website
+
+# Builds the documentation site (website/) from the repository files and deploys it to GitHub Pages.
+#
+# - Runs on pushes to main that touch anything the site is built from, on every published
+#   release, once a day (so contributors, stars and the changelog stay fresh) and on demand.
+# - Least privilege: the build job only reads the repository; only the deploy job may write Pages.
+# - All third-party actions are pinned to a commit SHA (the comment shows the release).
+# - No untrusted code runs here: the workflow has no pull_request trigger. Pull requests are
+#   checked by website-check.yml, which has a read-only token.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - CONTRIBUTING.md
+      - SECURITY.md
+      - MAINTAINERS.md
+      - pyproject.toml
+      - docs/**
+      - src/**
+      - examples/**
+      - website/**
+      - .github/CODEOWNERS
+      - .github/workflows/website.yml
+  release:
+    types: [published]
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  SITE_ORIGIN: https://hayagrivai-labs.github.io
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # "Last updated" on every page comes from git history
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install SciProof (the CLI reference is generated from it)
+        run: python -m pip install .
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+      - name: Build (fetches contributors, releases and PyPI info, fails on broken internal links)
+        working-directory: website
+        run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: website/dist
+      - name: Keep the built site for the link check
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-dist
+          path: website/dist
+          retention-days: 1
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  live-links:
+    name: Check links on the live site
+    # Only the daily run (and manual runs) look for broken links; pushes do not.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # to open, update or close the single "broken links" issue
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site-dist
+          path: dist
+      - name: Check every link of the built pages against the live site
+        id: lychee
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # Root-relative links are resolved against the live origin, so internal links are
+          # checked on the deployed site. Pages that need a login or are rate limited are skipped.
+          args: >-
+            --no-progress
+            --max-retries 2
+            --accept 200,201,202,203,204,206,429
+            --base-url ${{ env.SITE_ORIGIN }}
+            --exclude 'issues/new'
+            --exclude 'api\.github\.com'
+            --exclude '^https://github\.com/hayagrivai-labs/sciproof/(edit|issues/new)'
+            --format markdown
+            --output lychee-report.md
+            'dist/**/*.html'
+          fail: false
+          jobSummary: true
+      - name: Open, update or close the "broken links" issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LYCHEE_EXIT: ${{ steps.lychee.outputs.exit_code }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          title="Website: broken links detected"
+          gh label create website --repo "$REPO" --color 0E8A16 \
+            --description "Problems with the website or documentation pages" 2>/dev/null || true
+          existing=$(gh issue list --repo "$REPO" --label website --state open \
+            --search "\"$title\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"$title\")] | .[0].number // empty")
+          if [ "$LYCHEE_EXIT" = "0" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --repo "$REPO" --comment "The daily link check found no broken links ($(date -u +%F)). Closing."
+            fi
+            exit 0
+          fi
+          {
+            echo "The daily check of the live site (${SITE_ORIGIN}/sciproof/) found broken links."
+            echo
+            echo "Updated: $(date -u +%FT%TZ) · workflow run: ${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            cat lychee-report.md
+            echo
+            echo "_This issue is maintained automatically: it is updated on every run and closed when the links are fine._"
+          } > body.md
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$REPO" --body-file body.md
+          else
+            gh issue create --repo "$REPO" --title "$title" --label website --body-file body.md
+          fi
