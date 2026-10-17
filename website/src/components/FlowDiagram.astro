@@ -1,0 +1,111 @@
+---
+// "How it works". The stages mirror the README and docs/CONCEPTS.md: capture writes a manifest,
+// verify checks integrity (nothing executed), verify --rerun re-executes after confirmation.
+---
+
+<section class="lp-section" id="how">
+  <div class="lp-wrap">
+    <h2>How it works</h2>
+    <p class="lp-lead">One command records the evidence. Two ways of checking it give three possible verdicts.</p>
+    <div class="lp-flow" data-flow>
+      <svg viewBox="0 0 960 370" role="img" aria-labelledby="flow-title flow-desc">
+        <title id="flow-title">How SciProof works</title>
+        <desc id="flow-desc">
+          Inputs and a command go into capture, which writes an evidence manifest. Verify checks the integrity of the
+          files; verify with rerun re-executes the command and compares the results. Both end in PASS, FAIL or
+          INCONCLUSIVE.
+        </desc>
+        <defs>
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0L10 5L0 10z" class="arrow"></path>
+          </marker>
+        </defs>
+
+        <g class="step" style="--i:0">
+          <g class="node">
+            <rect x="20" y="20" width="220" height="80" rx="12"></rect>
+            <text x="130" y="55" text-anchor="middle">Inputs + command</text>
+            <text x="130" y="79" text-anchor="middle" class="sub">files · argv</text>
+          </g>
+        </g>
+        <g class="step" style="--i:1">
+          <path class="edge" d="M240 60H297" marker-end="url(#arrowhead)"></path>
+          <g class="node">
+            <rect x="300" y="20" width="170" height="80" rx="12"></rect>
+            <text x="385" y="55" text-anchor="middle">capture</text>
+            <text x="385" y="79" text-anchor="middle" class="sub">runs it once</text>
+          </g>
+        </g>
+        <g class="step" style="--i:2">
+          <path class="edge" d="M470 60H527" marker-end="url(#arrowhead)"></path>
+          <g class="node">
+            <rect x="530" y="10" width="260" height="100" rx="12"></rect>
+            <text x="660" y="45" text-anchor="middle">Evidence manifest (JSON)</text>
+            <text x="660" y="69" text-anchor="middle" class="sub">NAME.sciproof.json</text>
+            <text x="660" y="90" text-anchor="middle" class="sub">hashes · environment · logs</text>
+          </g>
+        </g>
+        <g class="step" style="--i:3">
+          <path class="edge" d="M660 110V140H320V167" marker-end="url(#arrowhead)"></path>
+          <g class="node">
+            <rect x="170" y="170" width="300" height="84" rx="12"></rect>
+            <text x="320" y="205" text-anchor="middle">verify</text>
+            <text x="320" y="229" text-anchor="middle" class="sub">integrity · runs nothing</text>
+          </g>
+        </g>
+        <g class="step" style="--i:4">
+          <path class="edge" d="M660 140H690V167" marker-end="url(#arrowhead)"></path>
+          <g class="node">
+            <rect x="530" y="170" width="320" height="84" rx="12"></rect>
+            <text x="690" y="205" text-anchor="middle">verify --rerun</text>
+            <text x="690" y="229" text-anchor="middle" class="sub">re-executes after confirmation, compares</text>
+          </g>
+        </g>
+        <g class="step" style="--i:5">
+          <path class="edge" d="M320 254V280H500M690 254V280H500V292" marker-end="url(#arrowhead)"></path>
+          <g class="node pass">
+            <rect x="260" y="296" width="130" height="54" rx="10"></rect>
+            <text x="325" y="330" text-anchor="middle" class="v">PASS</text>
+          </g>
+          <g class="node fail">
+            <rect x="410" y="296" width="130" height="54" rx="10"></rect>
+            <text x="475" y="330" text-anchor="middle" class="v">FAIL</text>
+          </g>
+          <g class="node inc">
+            <rect x="560" y="296" width="210" height="54" rx="10"></rect>
+            <text x="665" y="330" text-anchor="middle" class="v">INCONCLUSIVE</text>
+          </g>
+        </g>
+      </svg>
+      <ol class="lp-steps">
+        <li><strong>capture</strong> runs your command once and writes a manifest next to your files.</li>
+        <li>The manifest holds the command, SHA-256 hashes of declared inputs and outputs, the environment and the logs.</li>
+        <li><strong>verify</strong> checks that every file still matches. Nothing recorded is executed.</li>
+        <li><strong>verify --rerun</strong> runs the recorded command again, after confirmation, and compares the results exactly or within the tolerance you declared.</li>
+        <li>
+          The verdict is <span class="lp-chip pass">PASS</span>, <span class="lp-chip fail">FAIL</span> or
+          <span class="lp-chip inc">INCONCLUSIVE</span> (evidence missing or a check could not run; never treated as success).
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<script>
+  const flow = document.querySelector<HTMLElement>('[data-flow]');
+  if (flow) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      flow.classList.add('in'); // final state, no animation
+    } else {
+      new IntersectionObserver(
+        (entries, observer) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            flow.classList.add('in');
+            observer.disconnect();
+          }
+        },
+        { threshold: 0.35 },
+      ).observe(flow);
+    }
+  }
+</script>

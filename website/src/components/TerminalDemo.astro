@@ -1,0 +1,162 @@
+---
+// Replays the README quick start. The commands and outputs come from README.md at build time
+// (scripts/sync.mjs -> data/landing.json); nothing is typed in by hand here.
+import landing from '../data/landing.json';
+import { highlightParts } from '../lib/verdict';
+
+const steps = landing.demo;
+---
+
+<section class="lp-section" id="demo">
+  <div class="lp-wrap">
+    <h2>See it work</h2>
+    <p class="lp-lead">
+      The quick start from the README, replayed. Without JavaScript, or with reduced motion enabled, the
+      whole session is shown at once.
+    </p>
+    <div class="lp-terminal" data-terminal>
+      <div class="lp-terminal-bar">
+        <span class="lp-step-label" data-label aria-live="polite">Quick start, {steps.length} steps</span>
+        <button type="button" data-action="toggle" class="js-only" hidden>Pause</button>
+        <button type="button" data-action="replay" class="js-only" hidden>Replay</button>
+        <button type="button" data-action="skip" class="js-only" hidden>Show all</button>
+      </div>
+      <div class="lp-terminal-body" role="region" aria-label="Terminal session: capture, inspect, verify, rerun and a detected change" tabindex="0">
+        {
+          steps.map((step, index) => (
+            <div class="lp-step" data-step data-title={`Step ${index + 1} of ${steps.length}: ${step.title}`}>
+              <h3>{step.title}</h3>
+              {step.command.map((line, i) => (
+                <p class="lp-line cmd" data-cmd={line}>
+                  {i === 0 ? <span class="lp-prompt">$ </span> : <span class="lp-prompt">  </span>}
+                  <span class="typed">{line}</span>
+                </p>
+              ))}
+              {step.output.map((line) => (
+                <p class="lp-line out">
+                  {highlightParts(line).map((part) =>
+                    part.cls ? <span class={part.cls}>{part.text}</span> : <span>{part.text}</span>,
+                  )}
+                </p>
+              ))}
+            </div>
+          ))
+        }
+      </div>
+    </div>
+    <p class="lp-note">
+      Source: the “Quick start” section of README.md. Outputs contain “...” where the README shortens them.
+    </p>
+  </div>
+</section>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-terminal]');
+  if (root) {
+    const steps = [...root.querySelectorAll<HTMLElement>('[data-step]')];
+    const label = root.querySelector<HTMLElement>('[data-label]')!;
+    const buttons = {
+      toggle: root.querySelector<HTMLButtonElement>('[data-action="toggle"]')!,
+      replay: root.querySelector<HTMLButtonElement>('[data-action="replay"]')!,
+      skip: root.querySelector<HTMLButtonElement>('[data-action="skip"]')!,
+    };
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let paused = false;
+    let run = 0;
+
+    const showAll = () => {
+      run++;
+      steps.forEach((s) => {
+        s.hidden = false;
+        s.querySelectorAll<HTMLElement>('.lp-line').forEach((l) => (l.hidden = false));
+        s.querySelectorAll<HTMLElement>('[data-cmd]').forEach((l) => {
+          l.querySelector('.typed')!.textContent = l.dataset.cmd ?? '';
+        });
+      });
+      root.querySelector('.lp-cursor')?.remove();
+      label.textContent = 'Full session';
+    };
+
+    if (!reduced) {
+      buttons.toggle.hidden = buttons.replay.hidden = buttons.skip.hidden = false;
+      const waitIfPaused = async (id: number) => {
+        while (paused && id === run) await sleep(80);
+      };
+
+      const play = async () => {
+        const id = ++run;
+        paused = false;
+        buttons.toggle.textContent = 'Pause';
+        root.querySelector('.lp-cursor')?.remove();
+        steps.forEach((s) => {
+          s.hidden = true;
+          s.querySelectorAll<HTMLElement>('.lp-line').forEach((l) => (l.hidden = true));
+        });
+        for (const step of steps) {
+          if (id !== run) return;
+          steps.forEach((s) => (s.hidden = s !== step));
+          label.textContent = step.dataset.title ?? '';
+          const cursor = document.createElement('span');
+          cursor.className = 'lp-cursor';
+          cursor.setAttribute('aria-hidden', 'true');
+          for (const line of step.querySelectorAll<HTMLElement>('[data-cmd]')) {
+            const text = line.dataset.cmd ?? '';
+            const target = line.querySelector('.typed')!;
+            target.textContent = '';
+            line.hidden = false;
+            line.append(cursor);
+            for (let i = 1; i <= text.length; i++) {
+              await waitIfPaused(id);
+              if (id !== run) return;
+              target.textContent = text.slice(0, i);
+              await sleep(14);
+            }
+            await sleep(120);
+          }
+          cursor.remove();
+          await sleep(350);
+          for (const line of step.querySelectorAll<HTMLElement>('.lp-line.out')) {
+            await waitIfPaused(id);
+            if (id !== run) return;
+            line.hidden = false;
+            await sleep(90);
+          }
+          for (let waited = 0; waited < 1600; waited += 80) {
+            await waitIfPaused(id);
+            if (id !== run) return;
+            await sleep(80);
+          }
+        }
+        label.textContent = 'Done';
+      };
+
+      buttons.toggle.addEventListener('click', () => {
+        paused = !paused;
+        buttons.toggle.textContent = paused ? 'Resume' : 'Pause';
+      });
+      buttons.replay.addEventListener('click', () => void play());
+      buttons.skip.addEventListener('click', showAll);
+
+      // Keep the layout stable: the animated view has a fixed height and starts empty.
+      steps.forEach((s, i) => {
+        s.hidden = i !== 0;
+        s.querySelectorAll<HTMLElement>('.lp-line').forEach((l) => (l.hidden = true));
+      });
+      label.textContent = steps[0]?.dataset.title ?? '';
+
+      // start when the terminal scrolls into view
+      new IntersectionObserver(
+        (entries, observer) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            observer.disconnect();
+            void play();
+          }
+        },
+        { threshold: 0.3 },
+      ).observe(root);
+    } else {
+      label.textContent = 'Full session';
+    }
+  }
+</script>

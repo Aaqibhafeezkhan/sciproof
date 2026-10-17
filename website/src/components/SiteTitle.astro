@@ -1,0 +1,10 @@
+---
+// Starlight override: site title plus the package version read from pyproject.toml at build time.
+import version from '../data/version.json';
+import { BASE } from '../../site.config.mjs';
+---
+
+<a href={`${BASE}/`} class="site-title sl-flex" style="text-decoration: none; color: var(--sl-color-white); font-weight: 600; align-items: center;">
+  <span>SciProof</span>
+  <span class="sp-version" title="Version from pyproject.toml">v{version.version}</span>
+</a>

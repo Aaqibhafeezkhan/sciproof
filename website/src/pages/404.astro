@@ -1,0 +1,20 @@
+---
+import Landing from '../layouts/Landing.astro';
+import { BASE, REPO_URL } from '../../site.config.mjs';
+---
+
+<Landing title="Page not found · SciProof" description="This page does not exist.">
+  <section class="lp-hero">
+    <div class="lp-wrap">
+      <h1>Page not found</h1>
+      <p>
+        The page you asked for does not exist. Try the <a href={`${BASE}/docs/getting-started/`}>documentation</a> or go
+        back to the <a href={`${BASE}/`}>start page</a>.
+      </p>
+      <p>
+        Followed a link that should work? Please tell us with the
+        <a href={`${REPO_URL}/issues/new?template=website.yml`}>website issue form</a>.
+      </p>
+    </div>
+  </section>
+</Landing>

@@ -1,0 +1,70 @@
+// @ts-check
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+import { SITE, BASE, REPO_URL } from './site.config.mjs';
+
+export default defineConfig({
+  site: SITE,
+  base: BASE,
+  trailingSlash: 'always',
+  integrations: [
+    starlight({
+      title: 'SciProof',
+      description:
+        'Record a computational experiment once, then let anyone check the evidence: PASS, FAIL or INCONCLUSIVE.',
+      favicon: '/favicon.svg',
+      disable404Route: true, // src/pages/404.astro is used instead (same look as the landing page)
+      social: [{ icon: 'github', label: 'GitHub', href: REPO_URL }],
+      // "Last updated" is set per page from git history by scripts/sync.mjs;
+      // "Edit this page" points to the original file via the generated editUrl frontmatter.
+      lastUpdated: true,
+      customCss: [
+        '@fontsource-variable/inter',
+        '@fontsource-variable/jetbrains-mono',
+        './src/styles/theme.css',
+        './src/styles/docs.css',
+      ],
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+        Footer: './src/components/DocsFooter.astro',
+      },
+      sidebar: [
+        {
+          label: 'Start here',
+          items: [
+            { label: 'Getting started', slug: 'docs/getting-started' },
+            { label: 'Concepts', slug: 'docs/concepts' },
+            { label: 'Tutorial: NumPy & pandas', slug: 'docs/tutorial-numpy-pandas' },
+          ],
+        },
+        {
+          label: 'Reference',
+          items: [
+            { label: 'CLI reference', slug: 'docs/cli-reference' },
+            { label: 'Manifest format', slug: 'docs/manifest' },
+            { label: 'Exit codes', slug: 'docs/exit-codes' },
+            { label: 'Using SciProof in CI', slug: 'docs/ci' },
+          ],
+        },
+        {
+          label: 'Trust and design',
+          items: [
+            { label: 'Security & threat model', slug: 'docs/security' },
+            { label: 'Signing manifests', slug: 'docs/signing' },
+            { label: 'RO-Crate design notes', slug: 'docs/ro-crate' },
+            { label: 'Comparison with other tools', slug: 'docs/comparison' },
+          ],
+        },
+        {
+          label: 'Project',
+          items: [
+            { label: 'Roadmap', slug: 'docs/roadmap' },
+            { label: 'FAQ', slug: 'docs/faq' },
+            { label: 'Contributing', slug: 'docs/contributing' },
+            { label: 'Changelog', slug: 'docs/changelog' },
+          ],
+        },
+      ],
+    }),
+  ],
+});

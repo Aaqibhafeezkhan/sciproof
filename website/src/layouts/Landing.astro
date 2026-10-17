@@ -1,0 +1,118 @@
+---
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
+import '../styles/theme.css';
+import '../styles/landing.css';
+import version from '../data/version.json';
+import interUrl from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import monoUrl from '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url';
+import { BASE, REPO_URL, SITE } from '../../site.config.mjs';
+
+interface Props {
+  title: string;
+  description: string;
+}
+const { title, description } = Astro.props;
+const canonical = new URL(Astro.url.pathname, SITE).href;
+const reportUrl = `${REPO_URL}/issues/new?template=website.yml&page-url=${encodeURIComponent(canonical)}`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href={`${BASE}/favicon.svg`} type="image/svg+xml" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="preload" href={interUrl} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={monoUrl} as="font" type="font/woff2" crossorigin />
+    <script is:inline>
+      // Same storage key as the docs (Starlight), so the choice carries over between the pages.
+      (function () {
+        document.documentElement.classList.add('js');
+        var stored = null;
+        try {
+          stored = localStorage.getItem('starlight-theme');
+        } catch (e) {}
+        var theme =
+          stored === 'light' || stored === 'dark'
+            ? stored
+            : window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="lp-skip" href="#main">Skip to content</a>
+    <header class="lp-header">
+      <div class="lp-wrap">
+        <a class="lp-brand" href={`${BASE}/`}>
+          <svg viewBox="0 0 32 32" aria-hidden="true"
+            ><rect width="32" height="32" rx="7" fill="#0f2a24"></rect><path
+              d="M8 16.5l5.5 5.5L24 10.5"
+              fill="none"
+              stroke="#3fcf8e"
+              stroke-width="3.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"></path></svg
+          >
+          SciProof
+          <span class="lp-version" title="Version from pyproject.toml">v{version.version}</span>
+        </a>
+        <nav class="lp-nav" aria-label="Main">
+          <a href={`${BASE}/docs/getting-started/`}>Docs</a>
+          <a href={`${BASE}/#demo`}>Demo</a>
+          <a href={`${BASE}/#community`}>Community</a>
+          <a href={REPO_URL}>GitHub</a>
+          <button class="lp-theme" type="button" id="theme-toggle">Switch theme</button>
+        </nav>
+      </div>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="lp-footer">
+      <div class="lp-wrap">
+        <p>
+          MIT licence · No analytics, no cookies, fonts hosted on this site.
+        </p>
+        <ul>
+          <li><a href={`${BASE}/docs/getting-started/`}>Documentation</a></li>
+          <li><a href={REPO_URL}>GitHub</a></li>
+          <li><a href={`${REPO_URL}/blob/main/README.md`}>Edit this page: README.md</a></li>
+          <li><a href={reportUrl} rel="noopener">Report a problem with this page</a></li>
+        </ul>
+      </div>
+    </footer>
+    <script>
+      const root = document.documentElement;
+      const button = document.getElementById('theme-toggle');
+      const label = () => {
+        const next = root.dataset.theme === 'light' ? 'dark' : 'light';
+        if (button) {
+          button.textContent = next === 'dark' ? 'Dark mode' : 'Light mode';
+        }
+      };
+      label();
+      button?.addEventListener('click', () => {
+        const next = root.dataset.theme === 'light' ? 'dark' : 'light';
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem('starlight-theme', next);
+        } catch {
+          /* private mode: the choice just is not remembered */
+        }
+        label();
+      });
+    </script>
+  </body>
+</html>

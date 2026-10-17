@@ -1,0 +1,22 @@
+---
+import landing from '../data/landing.json';
+import { BASE } from '../../site.config.mjs';
+---
+
+<section class="lp-section" id="limits">
+  <div class="lp-wrap">
+    <h2>Limitations and threat model</h2>
+    <div class="lp-warning" role="note">
+      <strong>Warning:</strong> <code>sciproof verify --rerun</code> executes the command recorded in the manifest, with your
+      permissions and <strong>without a sandbox</strong>. A manifest you did not create is as untrusted as a script from the same source.
+      <code>inspect</code> and plain <code>verify</code> never execute it.
+    </div>
+    <ul class="lp-list">
+      {landing.limitations.map((item) => <li set:html={item} />)}
+    </ul>
+    <p class="lp-note">
+      Full threat model: <a href={`${BASE}/docs/security/`}>Security & threat model</a> (also available as SECURITY.md in the
+      repository).
+    </p>
+  </div>
+</section>

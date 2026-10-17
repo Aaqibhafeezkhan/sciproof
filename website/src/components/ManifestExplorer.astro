@@ -1,0 +1,114 @@
+---
+// A real manifest, generated at build time by running the README's capture command
+// (scripts/sync.mjs). Field descriptions come from the "Field reference" table of docs/MANIFEST.md.
+import sample from '../data/sample-manifest.json';
+import { BASE } from '../../site.config.mjs';
+
+const payload = JSON.stringify({ manifest: sample.manifest, fields: sample.fields }).replace(/</g, '\\u003c');
+---
+
+<section class="lp-section" id="manifest">
+  <div class="lp-wrap">
+    <h2>Look inside a manifest</h2>
+    <p class="lp-lead">
+      This manifest was produced while building this page by running <code>{sample.command}</code>. Select any field to see what
+      it means, as documented in <a href={`${BASE}/docs/manifest/`}>Manifest format</a>.
+    </p>
+    <div class="lp-explorer" data-explorer>
+      <div class="lp-tree" id="mf-tree" aria-label="Sample manifest"></div>
+      <div class="lp-detail" id="mf-detail" aria-live="polite">
+        <h3>Select a field</h3>
+        <p>Each line of the tree is a field of the JSON manifest.</p>
+      </div>
+    </div>
+    <noscript>
+      <pre><code>{JSON.stringify(sample.manifest, null, 2).slice(0, 4000)}</code></pre>
+    </noscript>
+    <script type="application/json" id="mf-data" set:html={payload} />
+  </div>
+</section>
+
+<script>
+  type Field = { path: string; html: string };
+  const data = JSON.parse(document.getElementById('mf-data')!.textContent!) as {
+    manifest: unknown;
+    fields: Field[];
+  };
+  const tree = document.getElementById('mf-tree')!;
+  const detail = document.getElementById('mf-detail')!;
+  const MAX_ITEMS = 8;
+
+  const normalise = (path: string) => path.replace(/\[\d+\]/g, '[]');
+  const describe = (path: string): string | null => {
+    const wanted = normalise(path);
+    // exact match first, then the closest documented parent
+    const exact = data.fields.find((f) => f.path === wanted);
+    if (exact) return exact.html;
+    const parents = data.fields.filter((f) => wanted.startsWith(f.path + '.') || wanted.startsWith(f.path + '['));
+    parents.sort((x, y) => y.path.length - x.path.length);
+    return parents[0]?.html ?? null;
+  };
+
+  const short = (v: unknown) => {
+    const text = typeof v === 'string' ? JSON.stringify(v) : String(v);
+    return text.length > 64 ? text.slice(0, 61) + '…"' : text;
+  };
+
+  function select(path: string, value: unknown, element: HTMLElement) {
+    tree.querySelectorAll('[aria-current]').forEach((n) => n.removeAttribute('aria-current'));
+    element.setAttribute('aria-current', 'true');
+    const kind = Array.isArray(value) ? `array of ${value.length}` : value === null ? 'null' : typeof value;
+    const text = describe(path);
+    detail.innerHTML = '';
+    const h = document.createElement('h3');
+    h.textContent = path;
+    const t = document.createElement('p');
+    t.innerHTML = `<small>Type: ${kind}</small>`;
+    const d = document.createElement('div');
+    if (text) d.innerHTML = text;
+    else d.textContent = 'This field is not described in docs/MANIFEST.md yet.';
+    detail.append(h, t, d);
+  }
+
+  function build(value: unknown, path: string, key: string | null): HTMLElement {
+    const li = document.createElement('li');
+    const label = key === null ? 'manifest' : key;
+    if (value !== null && typeof value === 'object') {
+      const details = document.createElement('details');
+      details.open = path.split('.').length < 2 && !/dependencies|stdout|stderr/.test(path);
+      const summary = document.createElement('summary');
+      summary.innerHTML = `<span class="k"></span> <span class="t"></span>`;
+      summary.querySelector('.k')!.textContent = label;
+      const entries = Array.isArray(value) ? value.map((v, i) => [String(i), v] as const) : Object.entries(value);
+      summary.querySelector('.t')!.textContent = Array.isArray(value) ? `[${entries.length}]` : `{${entries.length}}`;
+      summary.addEventListener('click', () => select(path || 'manifest', value, summary));
+      details.append(summary);
+      const ul = document.createElement('ul');
+      entries.slice(0, MAX_ITEMS).forEach(([k, v]) => {
+        const childPath = Array.isArray(value) ? `${path}[${k}]` : path ? `${path}.${k}` : k;
+        ul.append(build(v, childPath, Array.isArray(value) ? `[${k}]` : k));
+      });
+      if (entries.length > MAX_ITEMS) {
+        const more = document.createElement('li');
+        more.className = 't';
+        more.textContent = `… ${entries.length - MAX_ITEMS} more`;
+        ul.append(more);
+      }
+      details.append(ul);
+      li.append(details);
+    } else {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.innerHTML = `<span class="k"></span>: <span class="v"></span>`;
+      button.querySelector('.k')!.textContent = label;
+      button.querySelector('.v')!.textContent = short(value);
+      button.addEventListener('click', () => select(path, value, button));
+      li.append(button);
+    }
+    return li;
+  }
+
+  const root = document.createElement('ul');
+  root.append(build(data.manifest, '', null));
+  tree.append(root);
+</script>

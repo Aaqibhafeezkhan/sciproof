@@ -1,0 +1,29 @@
+---
+import Landing from '../layouts/Landing.astro';
+import Hero from '../components/Hero.astro';
+import TerminalDemo from '../components/TerminalDemo.astro';
+import FlowDiagram from '../components/FlowDiagram.astro';
+import ProofLevels from '../components/ProofLevels.astro';
+import TolerancePlayground from '../components/TolerancePlayground.astro';
+import ManifestExplorer from '../components/ManifestExplorer.astro';
+import Audiences from '../components/Audiences.astro';
+import Comparison from '../components/Comparison.astro';
+import Limits from '../components/Limits.astro';
+import Community from '../components/Community.astro';
+---
+
+<Landing
+  title="SciProof: record an experiment once, let anyone check the evidence"
+  description="SciProof records a computational experiment in one JSON manifest and verifies it later with a PASS, FAIL or INCONCLUSIVE verdict. Local-first, offline, no runtime dependencies."
+>
+  <Hero />
+  <TerminalDemo />
+  <FlowDiagram />
+  <ProofLevels />
+  <TolerancePlayground />
+  <ManifestExplorer />
+  <Audiences />
+  <Comparison />
+  <Limits />
+  <Community />
+</Landing>

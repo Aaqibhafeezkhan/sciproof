@@ -1,0 +1,102 @@
+---
+// Interactive tolerance explainer.
+// The comparison rule below mirrors `_numbers_close` in src/sciproof/numeric.py:
+//     abs(a - b) <= max(rtol * max(abs(a), abs(b)), atol)
+// scripts/sync.mjs fails the build if that line changes, so this page cannot silently drift.
+import tolerance from '../data/tolerance.json';
+import { BASE } from '../../site.config.mjs';
+---
+
+<section class="lp-section" id="tolerance">
+  <div class="lp-wrap">
+    <h2>Tolerances, made visible</h2>
+    <p class="lp-lead">
+      Outputs declared with <code>--output-numeric</code> are compared with a relative (<code>rtol</code>) and an absolute
+      (<code>atol</code>) tolerance that <em>you</em> choose at capture time. Try the rule SciProof uses. The defaults are
+      the ones of <code>sciproof capture</code>: <code>rtol=1e-9</code>, <code>atol=0</code>.
+    </p>
+    <div class="lp-tol" data-tol>
+      <div class="lp-card">
+        <div class="lp-field">
+          <label for="tol-a">Recorded value</label>
+          <input id="tol-a" type="number" step="any" value="1000" />
+        </div>
+        <div class="lp-field">
+          <label for="tol-b">Value found when re-running</label>
+          <input id="tol-b" type="number" step="any" value="1000.0000005" />
+        </div>
+        <div class="lp-field">
+          <label for="tol-rtol">rtol <span class="lp-readout" id="tol-rtol-out"></span></label>
+          <input id="tol-rtol" type="range" min="0" max="12" step="1" value="4" aria-describedby="tol-rtol-out" />
+        </div>
+        <div class="lp-field">
+          <label for="tol-atol">atol <span class="lp-readout" id="tol-atol-out"></span></label>
+          <input id="tol-atol" type="range" min="0" max="16" step="1" value="0" aria-describedby="tol-atol-out" />
+        </div>
+      </div>
+      <div class="lp-card">
+        <div id="tol-verdict" class="lp-verdict pass" role="status" aria-live="polite"></div>
+        <table class="lp-calc" aria-label="Calculation">
+          <tbody>
+            <tr><td>|recorded − found|</td><td id="tol-diff"></td></tr>
+            <tr><td>rtol · max(|recorded|, |found|)</td><td id="tol-rel"></td></tr>
+            <tr><td>atol</td><td id="tol-abs"></td></tr>
+            <tr><td>allowed = max(relative, atol)</td><td id="tol-allowed"></td></tr>
+          </tbody>
+        </table>
+        <details class="lp-source">
+          <summary>The rule, from <code>{tolerance.file}</code></summary>
+          <pre><code>{tolerance.source}</code></pre>
+        </details>
+      </div>
+    </div>
+    <p class="lp-note">
+      SciProof cannot tell you which tolerance is scientifically appropriate. NaN only matches NaN and infinities must match
+      exactly; integers and booleans are compared exactly. See the
+      <a href={`${BASE}/docs/tutorial-numpy-pandas/`}>tutorial</a> for choosing values.
+    </p>
+  </div>
+</section>
+
+<script>
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+  const a = $<HTMLInputElement>('tol-a');
+  const b = $<HTMLInputElement>('tol-b');
+  const rtolSlider = $<HTMLInputElement>('tol-rtol');
+  const atolSlider = $<HTMLInputElement>('tol-atol');
+
+  // slider position -> tolerance: 0 means exactly 0, otherwise a power of ten
+  const rtolOf = (i: number) => (i === 0 ? 0 : Math.pow(10, i - 13));
+  const atolOf = (i: number) => (i === 0 ? 0 : Math.pow(10, i - 16));
+  const fmt = (x: number) => (x === 0 ? '0' : x.toExponential(2).replace('e+', 'e'));
+
+  function update() {
+    const va = Number(a.value);
+    const vb = Number(b.value);
+    const rtol = rtolOf(Number(rtolSlider.value));
+    const atol = atolOf(Number(atolSlider.value));
+    $('tol-rtol-out').textContent = `= ${fmt(rtol)}`;
+    $('tol-atol-out').textContent = `= ${fmt(atol)}`;
+    const verdict = $('tol-verdict');
+    if (!Number.isFinite(va) || !Number.isFinite(vb)) {
+      verdict.className = 'lp-verdict fail';
+      verdict.textContent = 'Enter two finite numbers.';
+      return;
+    }
+    // same rule as _numbers_close in src/sciproof/numeric.py (finite values)
+    const diff = Math.abs(va - vb);
+    const relative = rtol * Math.max(Math.abs(va), Math.abs(vb));
+    const allowed = Math.max(relative, atol);
+    const ok = diff <= allowed;
+    $('tol-diff').textContent = fmt(diff);
+    $('tol-rel').textContent = fmt(relative);
+    $('tol-abs').textContent = fmt(atol);
+    $('tol-allowed').textContent = fmt(allowed);
+    verdict.className = `lp-verdict ${ok ? 'pass' : 'fail'}`;
+    verdict.textContent = ok
+      ? `PASS  numerically equivalent (rtol=${fmt(rtol)}, atol=${fmt(atol)})`
+      : `FAIL  outside the declared tolerance: recorded ${va}, found ${vb} (rtol=${fmt(rtol)}, atol=${fmt(atol)})`;
+  }
+  for (const el of [a, b, rtolSlider, atolSlider]) el.addEventListener('input', update);
+  update();
+</script>

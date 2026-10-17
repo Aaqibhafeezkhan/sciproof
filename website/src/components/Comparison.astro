@@ -1,0 +1,34 @@
+---
+import landing from '../data/landing.json';
+import { BASE } from '../../site.config.mjs';
+---
+
+<section class="lp-section" id="compare">
+  <div class="lp-wrap">
+    <h2>How it relates to other tools</h2>
+    <p class="lp-lead">
+      Recording a command with its hashes is not new. These notes keep the wording of the project's own comparison,
+      including where an existing tool already does the job.
+    </p>
+    <div class="lp-table-wrap">
+      <table class="lp-table">
+        <caption>Related tools, from the README (links go to the tools' own documentation).</caption>
+        <thead><tr><th scope="col">Tool</th><th scope="col">Relation to SciProof</th></tr></thead>
+        <tbody>
+          {
+            landing.related.map((row) => (
+              <tr>
+                <th scope="row" set:html={row.tool} />
+                <td set:html={row.relation} />
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="lp-note">
+      The full analysis, including what could not be confirmed, is in the
+      <a href={`${BASE}/docs/comparison/`}>comparison page</a>. Its differentiation claim is described there as an unproven hypothesis.
+    </p>
+  </div>
+</section>
