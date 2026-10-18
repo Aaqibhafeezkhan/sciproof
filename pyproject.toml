@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
+# 77+ understands the SPDX "license" string and "license-files" (PEP 639)
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -24,6 +25,12 @@ classifiers = [
 ]
 # No runtime dependencies on purpose: the evidence tool should be easy to audit.
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/hayagrivai-labs/sciproof"
+Repository = "https://github.com/hayagrivai-labs/sciproof"
+Issues = "https://github.com/hayagrivai-labs/sciproof/issues"
+Documentation = "https://github.com/hayagrivai-labs/sciproof/tree/main/docs"
 
 [project.optional-dependencies]
 numpy = ["numpy>=1.26"]
