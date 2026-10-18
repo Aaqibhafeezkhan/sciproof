@@ -68,6 +68,10 @@ fails with `incorrect signature` (exit 255); verifying with a different namespac
 domains of use", per the OpenSSH manual) keeps a SciProof signature from being replayed as another
 kind of signature.
 
+SciProof writes manifests with LF line endings on every OS, and a signature covers the exact bytes.
+If the manifest lives in a Git repository, mark it as binary so that `core.autocrlf` cannot change it:
+`*.sciproof.json -text` in `.gitattributes`.
+
 Always run `sciproof verify` **and** the signature check: the first checks the files against the
 manifest, the second checks that the manifest is the one that was signed.
 
