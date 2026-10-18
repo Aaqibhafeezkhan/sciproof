@@ -30,6 +30,14 @@ can later verify it with an explicit verdict: `PASS`, `FAIL` or `INCONCLUSIVE`.
 Bitwise reproducibility across different hardware or platforms is **not** promised. Details in
 [docs/CONCEPTS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/CONCEPTS.md).
 
+## Use cases
+
+SciProof is a lightweight way to verify that a computational experiment's recorded files and
+supported outputs have not unexpectedly changed. Typical situations: ML experiment verification,
+regression testing for scientific software, numerical simulations, reproducing research results,
+data pipeline outputs and benchmark verification. Each one, with its limits, is described in
+[docs/USE_CASES.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/USE_CASES.md).
+
 ## Install
 
 ```bash
