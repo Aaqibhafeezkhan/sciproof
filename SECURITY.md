@@ -38,6 +38,12 @@ the same source: it contains a command.
 
 * **A confirmed rerun is arbitrary code execution** with your permissions. SciProof does not
   sandbox it. Run untrusted manifests in a disposable VM or container.
+* **A rerun inherits your whole environment.** The recorded command starts with a copy of
+  the environment of the process that runs `sciproof verify --rerun`, including variables such as
+  `AWS_SECRET_ACCESS_KEY` or `GITHUB_TOKEN`, so a manifest from someone else can read them. The
+  allowlist described above only limits what is *recorded*, not what the command can *see*.
+  Start untrusted reruns from a shell without credentials (for example `env -i` plus the variables
+  you need, or a fresh container).
 * **Manifests are not signed.** Hashes detect accidental or naive changes after capture; they
   do not stop someone who can rewrite both the manifest and the files from fabricating
   consistent evidence. Distribute manifests through a channel you trust (signed Git commits,

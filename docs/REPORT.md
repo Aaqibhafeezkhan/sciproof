@@ -1,0 +1,90 @@
+# The verification report
+
+`sciproof verify` explains its verdict. This page describes the text report and the versioned
+JSON report (`--json`, schema `sciproof.report`, version `1.0`).
+
+## What a report contains
+
+* **Checks:** one line per fact that was checked, each `PASS`, `FAIL` or `INCONCLUSIVE`, with
+  the subject (for example `input data.csv`) and a message.
+* **Evidence (JSON):** the facts a check used, so a result can be audited without re-running
+  anything: digests, tolerances, the numeric rule and the exact differences with their location.
+* **Basis:** one sentence saying why the verdict was chosen (the aggregation rule below).
+* **Not checked:** what this verification did *not* establish. This list is part of every report.
+* **Warnings and notes:** things that do not change the verdict but matter for interpreting it,
+  such as a dirty Git tree or a different environment.
+
+## Verdicts and how they are combined
+
+| Verdict | Meaning | Exit code |
+| --- | --- | --- |
+| `PASS` | Every check that was performed succeeded, and at least one check was performed. | `0` |
+| `FAIL` | At least one check found something that contradicts the evidence. | `1` |
+| `INCONCLUSIVE` | No check failed, but at least one could not be carried out, or none was performed. | `2` |
+
+The aggregation is conservative: **one `FAIL` makes the whole result `FAIL`, even if other checks
+are `INCONCLUSIVE`; any `INCONCLUSIVE` check prevents `PASS`.** Missing evidence is never read
+as success. A report with no checks at all is `INCONCLUSIVE`.
+
+## What a `PASS` does not say
+
+Whatever the verdict, the report lists what was not established. Without `--rerun` this always
+includes that the recorded command was **not executed**, so nothing is said about reproducibility.
+It also always includes:
+
+* scientific validity: a matching result is not shown to be correct;
+* files that were not declared as inputs or outputs;
+* authenticity: manifests are unsigned, so who produced the evidence is not verified (see
+  [Signing manifests](DESIGN_SIGNING.md)).
+
+After a rerun, the report adds that stdout/stderr are compared for information only, that the
+environment is compared but not reconstructed, and that the result covers one re-execution on
+this machine.
+
+## JSON report (schema `sciproof.report` 1.0)
+
+```json
+{
+  "schema": "sciproof.report",
+  "schema_version": "1.0",
+  "name": "demo",
+  "result": "FAIL",
+  "reason": "FAIL because 1 (output result.json) check(s) contradict the evidence; one failed check is enough",
+  "counts": {"PASS": 2, "FAIL": 1, "INCONCLUSIVE": 0},
+  "rerun_requested": false,
+  "rerun_executed": false,
+  "checks": [
+    {
+      "status": "FAIL",
+      "subject": "output result.json",
+      "message": "modified since capture (SHA-256 differs)",
+      "evidence": {
+        "kind": "output_integrity",
+        "path": "result.json",
+        "expected_sha256": "…",
+        "actual_sha256": "…"
+      }
+    }
+  ],
+  "not_checked": ["reproducibility: the recorded command was not executed", "…"],
+  "warnings": [],
+  "notes": [],
+  "rerun_outputs_dir": null
+}
+```
+
+Compatibility: `name`, `result`, `rerun_requested`, `checks[].status|subject|message`,
+`warnings`, `notes` and `rerun_outputs_dir` exist since 0.1.0 and keep their meaning. New fields
+are added within `1.x`; a field is only removed or changed in a new major version of the schema.
+`evidence` is `null` for checks that have no structured facts (for example an unsafe path).
+
+### Evidence kinds
+
+| `kind` | Used by | Fields |
+| --- | --- | --- |
+| `input_integrity`, `output_integrity`, `snapshot_integrity`, `rerun_output_exact` | digest comparisons | `path`, `expected_sha256`, `actual_sha256` (`null` when the file is absent) |
+| `exit_code` | rerun | `recorded`, `rerun` |
+| `rerun_output_numeric` | rerun of a `--output-numeric` file | `path`, `rtol`, `atol`, `rule`, `differences` (list, empty when equivalent; `null` when the file could not be compared), `error` |
+
+The report is a statement about the checks listed in it. It does not claim that the experiment
+as a whole is reproducible, and it is not signed.

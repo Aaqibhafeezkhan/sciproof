@@ -137,6 +137,13 @@ def capture(
             )
         before[relative] = sha256_file(target)[0] if target.is_file() else None
 
+    if numeric_paths and rtol >= 1:
+        warnings.append(
+            f"rtol={rtol} is 1 or more: a relative tolerance this large accepts values that "
+            "differ by 100% or more (any number is then equivalent to 0, and a value to its "
+            "negation when rtol >= 2). Use a smaller rtol unless that is intended"
+        )
+
     git = git_info(base)
     if git and git["dirty"]:
         warnings.append(

@@ -43,6 +43,8 @@ export default defineConfig({
             { label: 'CLI reference', slug: 'docs/cli-reference' },
             { label: 'Manifest format', slug: 'docs/manifest' },
             { label: 'Exit codes', slug: 'docs/exit-codes' },
+            { label: 'Verification report', slug: 'docs/report' },
+            { label: 'Numeric comparison rules', slug: 'docs/numeric-comparison' },
             { label: 'Using SciProof in CI', slug: 'docs/ci' },
           ],
         },
@@ -53,12 +55,14 @@ export default defineConfig({
             { label: 'Signing manifests', slug: 'docs/signing' },
             { label: 'RO-Crate design notes', slug: 'docs/ro-crate' },
             { label: 'Comparison with other tools', slug: 'docs/comparison' },
+            { label: 'Benchmarks', slug: 'docs/benchmarks' },
           ],
         },
         {
           label: 'Project',
           items: [
             { label: 'Roadmap', slug: 'docs/roadmap' },
+            { label: 'Product roadmap', slug: 'docs/product-roadmap' },
             { label: 'FAQ', slug: 'docs/faq' },
             { label: 'Contributing', slug: 'docs/contributing' },
             { label: 'Changelog', slug: 'docs/changelog' },

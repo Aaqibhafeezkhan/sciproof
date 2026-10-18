@@ -1,0 +1,37 @@
+# Changelog
+
+All notable changes are listed here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Released versions are also published as
+[GitHub Releases](https://github.com/hayagrivai-labs/sciproof/releases).
+
+## [Unreleased]
+
+### Added
+
+* `verify` explains its verdict. The text report ends with a `basis:` line (why the verdict was
+  chosen) and `not checked:` lines (what was not established); `verify --json` is now a versioned
+  document (`schema: "sciproof.report"`, `schema_version: "1.0"`) with `reason`, `counts`,
+  `rerun_executed`, `not_checked` and, per check, structured `evidence` (digests, tolerance rule,
+  exact differences). Existing fields are unchanged. See `docs/REPORT.md`.
+* `capture` warns when `--rtol` is 1 or more, because such a tolerance accepts values that differ
+  by 100% or more.
+* CSV differences name the column: `r2c1 (column 'loss'): recorded 0.4, found 0.9`.
+* Documentation: exact numeric comparison rules (`docs/COMPARISON.md`), the report format
+  (`docs/REPORT.md`), baseline audit, product roadmap, benchmark results and an architecture
+  decision record. The competitive analysis was extended with ReproLedger, VeriRepro, noWorkflow
+  and verified facts for DVC, ReproZip and MLflow.
+* `benchmarks/run_benchmarks.py`: eight reproducible verification scenarios.
+* Tests: report schema and aggregation, and one test per numeric comparison rule.
+
+### Changed
+
+* A repeated key in a JSON object is now an error in manifests and in numeric output files. It
+  was silently resolved to the last value before. SciProof never writes repeated keys, so
+  manifests it created are unaffected.
+* `SECURITY.md` states that a confirmed rerun inherits the full environment of the calling
+  process.
+
+### Fixed
+
+* Ambiguous JSON (repeated keys) could be accepted as evidence with a different value than other
+  parsers would read.

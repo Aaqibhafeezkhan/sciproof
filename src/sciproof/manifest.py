@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from sciproof.errors import ManifestError, UnsafePathError
+from sciproof.jsonstrict import reject_duplicate_keys
 from sciproof.paths import validate_relative_path
 
 SCHEMA = "sciproof.manifest"
@@ -199,10 +200,10 @@ def load_manifest(path: Path) -> dict[str, Any]:
     if size > MAX_MANIFEST_BYTES:
         raise ManifestError(f"manifest is larger than {MAX_MANIFEST_BYTES} bytes: {path}")
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys)
     except UnicodeDecodeError as exc:
         raise ManifestError(f"manifest is not valid UTF-8: {exc}") from exc
-    except (json.JSONDecodeError, RecursionError) as exc:
+    except (ValueError, RecursionError) as exc:  # includes JSONDecodeError and duplicate keys
         raise ManifestError(f"manifest is not valid JSON: {exc}") from exc
     return validate_manifest(data)
 

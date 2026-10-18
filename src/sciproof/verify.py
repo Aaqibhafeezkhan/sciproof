@@ -41,6 +41,10 @@ from sciproof.runner import (
 from sciproof.textutil import safe_text
 
 DEFAULT_RERUN_TIMEOUT_SECONDS = 3600.0
+# How a numeric tolerance is applied (docs/COMPARISON.md has the full semantics).
+NUMERIC_RULE = (
+    "|a - b| <= max(rtol * max(|a|, |b|), atol); NaN equals NaN; infinities must match in sign"
+)
 MAX_LISTED_DIFFERENCES = 10
 
 
@@ -50,11 +54,25 @@ class Status(StrEnum):
     INCONCLUSIVE = "INCONCLUSIVE"
 
 
+REPORT_SCHEMA = "sciproof.report"
+REPORT_SCHEMA_VERSION = "1.0"
+MAX_SUBJECTS_IN_REASON = 5
+
+# Statements no verification by SciProof can make, whatever the verdict.
+ALWAYS_NOT_CHECKED = (
+    "scientific validity: a matching result is not shown to be correct",
+    "files that were not declared as inputs or outputs",
+    "authenticity: manifests are unsigned, so who produced this evidence is not verified",
+)
+
+
 @dataclass
 class Check:
     status: Status
     subject: str
     message: str
+    #: Facts the check used (digests, tolerances, ...); ``kind`` names the sort of check.
+    evidence: dict[str, Any] | None = None
 
 
 @dataclass
@@ -65,9 +83,16 @@ class Report:
     warnings: list[str] = field(default_factory=list)
     info: list[str] = field(default_factory=list)
     rerun_outputs_dir: str | None = None
+    rerun_executed: bool = False
 
-    def add(self, status: Status, subject: str, message: str) -> None:
-        self.checks.append(Check(status, subject, message))
+    def add(
+        self,
+        status: Status,
+        subject: str,
+        message: str,
+        evidence: dict[str, Any] | None = None,
+    ) -> None:
+        self.checks.append(Check(status, subject, message, evidence))
 
     @property
     def status(self) -> Status:
@@ -78,10 +103,57 @@ class Report:
             return Status.INCONCLUSIVE
         return Status.PASS
 
+    @property
+    def reason(self) -> str:
+        """Why the verdict is what it is, in one sentence (the aggregation rule applied)."""
+
+        def subjects(status: Status) -> str:
+            names = [c.subject for c in self.checks if c.status is status]
+            shown = ", ".join(names[:MAX_SUBJECTS_IN_REASON])
+            more = len(names) - MAX_SUBJECTS_IN_REASON
+            return f"{len(names)} ({shown}{f', and {more} more' if more > 0 else ''})"
+
+        if self.status is Status.FAIL:
+            return (
+                f"FAIL because {subjects(Status.FAIL)} check(s) contradict the evidence; "
+                "one failed check is enough"
+            )
+        if self.status is Status.INCONCLUSIVE:
+            if not self.checks:
+                return "INCONCLUSIVE because no check could be performed"
+            return (
+                f"INCONCLUSIVE because no check failed but {subjects(Status.INCONCLUSIVE)} "
+                "could not be carried out; missing evidence is never counted as success"
+            )
+        return (
+            f"PASS because all {len(self.checks)} performed checks succeeded; this covers only "
+            "the checks listed above, not what is under 'not checked'"
+        )
+
+    @property
+    def not_checked(self) -> list[str]:
+        """What this verification did *not* establish."""
+        items = list(ALWAYS_NOT_CHECKED)
+        if self.rerun_executed:
+            items += [
+                "stdout and stderr of the rerun: compared for information only, not in the verdict",
+                "environment reconstruction: differences are reported, not reproduced",
+                "other machines or platforms: one re-execution on this machine only",
+            ]
+        else:
+            items.insert(0, "reproducibility: the recorded command was not executed")
+        return items
+
 
 # --------------------------------------------------------------------------------------------
 # integrity checks (never execute anything)
 # --------------------------------------------------------------------------------------------
+
+
+def _digest_evidence(
+    kind: str, path: str, expected: str | None, actual: str | None
+) -> dict[str, Any]:
+    return {"kind": kind, "path": path, "expected_sha256": expected, "actual_sha256": actual}
 
 
 def _resolve(base: Path, relative: str, report: Report, subject: str) -> Path | None:
@@ -106,14 +178,18 @@ def _check_inputs(base: Path, manifest: dict[str, Any], report: Report) -> bool:
                 Status.INCONCLUSIVE,
                 subject,
                 "not available, so nothing can be said about it (restore the file to verify)",
+                _digest_evidence("input_integrity", item["path"], item["sha256"], None),
             )
         else:
             digest, _ = sha256_file(path)
+            evidence = _digest_evidence("input_integrity", item["path"], item["sha256"], digest)
             if digest == item["sha256"]:
-                report.add(Status.PASS, subject, "unchanged (SHA-256 matches)")
+                report.add(Status.PASS, subject, "unchanged (SHA-256 matches)", evidence)
             else:
                 intact = False
-                report.add(Status.FAIL, subject, "modified since capture (SHA-256 differs)")
+                report.add(
+                    Status.FAIL, subject, "modified since capture (SHA-256 differs)", evidence
+                )
     return intact
 
 
@@ -127,11 +203,16 @@ def _check_snapshot(base: Path, item: dict[str, Any], report: Report, subject: s
             Status.INCONCLUSIVE,
             f"{subject} snapshot",
             f"recorded copy {snapshot['path']} is missing; numeric comparison is impossible",
+            _digest_evidence("snapshot_integrity", snapshot["path"], snapshot["sha256"], None),
         )
         return None
-    if sha256_file(path)[0] != snapshot["sha256"]:
+    actual = sha256_file(path)[0]
+    if actual != snapshot["sha256"]:
         report.add(
-            Status.FAIL, f"{subject} snapshot", "recorded copy was modified (SHA-256 differs)"
+            Status.FAIL,
+            f"{subject} snapshot",
+            "recorded copy was modified (SHA-256 differs)",
+            _digest_evidence("snapshot_integrity", snapshot["path"], snapshot["sha256"], actual),
         )
         return None
     return path
@@ -148,17 +229,24 @@ def _check_outputs(base: Path, manifest: dict[str, Any], report: Report) -> dict
         if path is None:
             continue
         exists = path.is_file()
+        actual = sha256_file(path)[0] if exists else None
+        evidence = _digest_evidence("output_integrity", item["path"], item["sha256"], actual)
         if not item["present"]:
             if exists:
-                report.add(Status.FAIL, subject, "was recorded as absent but now exists")
+                report.add(Status.FAIL, subject, "was recorded as absent but now exists", evidence)
             else:
-                report.add(Status.PASS, subject, "still absent, as recorded")
+                report.add(Status.PASS, subject, "still absent, as recorded", evidence)
         elif not exists:
-            report.add(Status.FAIL, subject, "missing (it existed when the evidence was captured)")
-        elif sha256_file(path)[0] == item["sha256"]:
-            report.add(Status.PASS, subject, "unchanged (SHA-256 matches)")
+            report.add(
+                Status.FAIL,
+                subject,
+                "missing (it existed when the evidence was captured)",
+                evidence,
+            )
+        elif actual == item["sha256"]:
+            report.add(Status.PASS, subject, "unchanged (SHA-256 matches)", evidence)
         else:
-            report.add(Status.FAIL, subject, "modified since capture (SHA-256 differs)")
+            report.add(Status.FAIL, subject, "modified since capture (SHA-256 differs)", evidence)
     return snapshots
 
 
@@ -244,13 +332,19 @@ def _compare_rerun(
     report: Report,
 ) -> None:
     recorded = manifest["execution"]
+    exit_evidence = {
+        "kind": "exit_code",
+        "recorded": recorded["exit_code"],
+        "rerun": result.exit_code,
+    }
     if result.exit_code == recorded["exit_code"]:
-        report.add(Status.PASS, "exit code", f"{result.exit_code}, same as recorded")
+        report.add(Status.PASS, "exit code", f"{result.exit_code}, same as recorded", exit_evidence)
     else:
         report.add(
             Status.FAIL,
             "exit code",
             f"rerun exited with {result.exit_code}, recorded {recorded['exit_code']}",
+            exit_evidence,
         )
 
     for item in manifest["outputs"]:
@@ -272,14 +366,21 @@ def _compare_rerun(
             continue
         if item["compare"]["mode"] == "exact":
             digest, _ = sha256_file(path)
+            evidence = _digest_evidence("rerun_output_exact", item["path"], item["sha256"], digest)
             if digest == item["sha256"]:
-                report.add(Status.PASS, subject, "identical to the recorded output (exact SHA-256)")
+                report.add(
+                    Status.PASS,
+                    subject,
+                    "identical to the recorded output (exact SHA-256)",
+                    evidence,
+                )
             else:
                 report.add(
                     Status.FAIL,
                     subject,
                     "differs from the recorded output (exact SHA-256 comparison). If small "
                     "numerical differences are acceptable, capture it with --output-numeric",
+                    evidence,
                 )
             continue
         snapshot = snapshots.get(item["path"])
@@ -291,19 +392,38 @@ def _compare_rerun(
             )
             continue
         rtol, atol = item["compare"]["rtol"], item["compare"]["atol"]
+        numeric_evidence: dict[str, Any] = {
+            "kind": "rerun_output_numeric",
+            "path": item["path"],
+            "rtol": rtol,
+            "atol": atol,
+            "rule": NUMERIC_RULE,
+        }
         try:
             differences = compare(load_numeric(snapshot), load_numeric(path), rtol, atol)
         except NumericFormatError as exc:
-            report.add(Status.FAIL, subject, f"cannot be compared numerically: {exc}")
+            report.add(
+                Status.FAIL,
+                subject,
+                f"cannot be compared numerically: {exc}",
+                {**numeric_evidence, "differences": None, "error": str(exc)},
+            )
             continue
+        numeric_evidence["differences"] = differences
         if differences:
             report.add(
                 Status.FAIL,
                 subject,
                 "outside the declared tolerance: " + "; ".join(differences),
+                numeric_evidence,
             )
         else:
-            report.add(Status.PASS, subject, f"numerically equivalent (rtol={rtol}, atol={atol})")
+            report.add(
+                Status.PASS,
+                subject,
+                f"numerically equivalent (rtol={rtol}, atol={atol})",
+                numeric_evidence,
+            )
 
     for stream in ("stdout", "stderr"):
         text = getattr(result, stream)
@@ -358,6 +478,7 @@ def _rerun(
             report.add(Status.INCONCLUSIVE, "rerun", f"{exc} (is it installed here?)")
             return
 
+        report.rerun_executed = True
         _compare_rerun(base, manifest, snapshots, result, report)
 
         # A rerun must not damage the evidence it is checked against.
@@ -514,14 +635,28 @@ def verify(
 
 def report_to_dict(report: Report) -> dict[str, Any]:
     """The report as plain data. Strings are not escaped here; ``json.dumps`` does that."""
+    counts = {status.value: 0 for status in Status}
+    for check in report.checks:
+        counts[check.status.value] += 1
     return {
+        "schema": REPORT_SCHEMA,
+        "schema_version": REPORT_SCHEMA_VERSION,
         "name": report.name,
         "result": report.status.value,
+        "reason": report.reason,
+        "counts": counts,
         "rerun_requested": report.rerun_requested,
+        "rerun_executed": report.rerun_executed,
         "checks": [
-            {"status": c.status.value, "subject": c.subject, "message": c.message}
+            {
+                "status": c.status.value,
+                "subject": c.subject,
+                "message": c.message,
+                "evidence": c.evidence,
+            }
             for c in report.checks
         ],
+        "not_checked": report.not_checked,
         "warnings": list(report.warnings),
         "notes": list(report.info),
         "rerun_outputs_dir": report.rerun_outputs_dir,
@@ -549,6 +684,9 @@ def format_report(report: Report) -> str:
         lines.append(
             f"  note: files produced by the rerun were moved to {report.rerun_outputs_dir}/"
         )
+    lines.append("")
+    lines.append(f"  basis: {report.reason}")
+    lines.extend(f"  not checked: {item}" for item in report.not_checked)
     lines.append("")
     lines.append(f"RESULT: {report.status.value}")
     return "\n".join(lines)

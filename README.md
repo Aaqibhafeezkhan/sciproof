@@ -93,6 +93,12 @@ $ sciproof verify baseline.sciproof.json
 
   note: scope: artifact integrity only. The recorded command was NOT executed, so this does not show that the results can be reproduced.
 
+  basis: PASS because all 4 performed checks succeeded; this covers only the checks listed above, not what is under 'not checked'
+  not checked: reproducibility: the recorded command was not executed
+  not checked: scientific validity: a matching result is not shown to be correct
+  not checked: files that were not declared as inputs or outputs
+  not checked: authenticity: manifests are unsigned, so who produced this evidence is not verified
+
 RESULT: PASS
 ```
 
@@ -113,12 +119,20 @@ RESULT: PASS
 ```console
 $ sciproof verify baseline.sciproof.json
   [FAIL] output examples/out/results.json: modified since capture (SHA-256 differs)
+  basis: FAIL because 1 (output examples/out/results.json) check(s) contradict the evidence; one failed check is enough
+  ...
 RESULT: FAIL
 ```
 
 Exit codes: `0` PASS, `1` FAIL, `2` INCONCLUSIVE, `3` usage error or invalid manifest. A missing
 input, a missing numeric snapshot, a command that cannot be started, a timeout or a declined
 rerun are `INCONCLUSIVE`, never `PASS`.
+
+Every report says why the verdict was chosen (`basis`) and what was *not* checked. With `--json`
+it also carries the evidence behind each check (digests, tolerances, the exact differences).
+Details: [docs/REPORT.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/REPORT.md);
+the exact numeric comparison rules:
+[docs/COMPARISON.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/COMPARISON.md).
 
 A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/TUTORIAL_NUMPY_PANDAS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/TUTORIAL_NUMPY_PANDAS.md).
 
