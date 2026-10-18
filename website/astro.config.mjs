@@ -33,6 +33,7 @@ export default defineConfig({
           label: 'Start here',
           items: [
             { label: 'Getting started', slug: 'docs/getting-started' },
+            { label: 'Use cases', slug: 'docs/use-cases' },
             { label: 'Concepts', slug: 'docs/concepts' },
             { label: 'Tutorial: NumPy & pandas', slug: 'docs/tutorial-numpy-pandas' },
           ],
