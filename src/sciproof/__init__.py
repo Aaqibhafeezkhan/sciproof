@@ -4,4 +4,4 @@ SciProof checks *integrity* and *execution reproducibility* of recorded runs. It
 and cannot, establish that a scientific result is correct. See docs/CONCEPTS.md.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
