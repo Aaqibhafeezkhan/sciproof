@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -97,12 +98,20 @@ def test_interrupted_capture_writes_no_evidence(project, monkeypatch):
 
 
 def test_ctrl_c_during_the_command_becomes_command_interrupted(tmp_path, monkeypatch):
-    def interrupted(*args, **kwargs):
-        raise KeyboardInterrupt
+    real_communicate = subprocess.Popen.communicate
+    calls = []
 
-    monkeypatch.setattr(subprocess, "run", interrupted)
+    def interrupted(self, *args, **kwargs):
+        if not calls:  # the first call is the one waiting for the command
+            calls.append(1)
+            raise KeyboardInterrupt
+        return real_communicate(self, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess.Popen, "communicate", interrupted)
+    started = time.monotonic()
     with pytest.raises(CommandInterrupted):
-        run_command(["anything"], tmp_path, None)
+        run_command([sys.executable, "-c", "import time; time.sleep(30)"], tmp_path, None)
+    assert time.monotonic() - started < 15  # the command was stopped, not waited for
 
 
 def test_timeout_writes_no_evidence(project):
@@ -211,6 +220,25 @@ def test_capture_function_is_usable_without_the_cli(project):
         inputs=["data.json"],
     )
     assert result.manifest_path.name == "direct.sciproof.json"
+
+
+GRANDCHILD = (
+    "import subprocess, sys, time; "
+    "subprocess.Popen([sys.executable, '-c', "
+    '\'import time, pathlib; time.sleep(4); pathlib.Path("late.txt").write_text("x")\']); '
+    "time.sleep(60)"
+)
+
+
+def test_timeout_is_enforced_when_the_command_leaves_a_child_running(project):
+    started = time.monotonic()
+    with pytest.raises(CaptureError, match="did not finish"):
+        project.capture(argv=[sys.executable, "-c", GRANDCHILD], timeout=1)
+    assert time.monotonic() - started < 3.5  # not the 4+ seconds the child needs to exit
+    assert not project.manifest.exists()
+
+    time.sleep(4.5)  # long enough for a surviving child to have written its marker
+    assert not (project.root / "late.txt").exists(), "the child process survived the timeout"
 
 
 def _snapshot_files(project):
