@@ -378,12 +378,17 @@ def _rerun(
         for relative in output_paths:
             target = resolve_inside(base, relative)
             if target.is_file():
+                if (
+                    relative in had_original
+                    and sha256_file(target)[0] == sha256_file(backup_root / relative)[0]
+                ):
+                    continue  # the rerun did not change this file: nothing to move, nothing to say
                 if moved_to is None:
                     moved_to = base / _rerun_dir_name(stamp, counter)
                 destination = moved_to / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(target), destination)
-            if relative in had_original:
+            if relative in had_original and not target.is_file():
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(backup_root / relative, target)
         for relative in output_paths:

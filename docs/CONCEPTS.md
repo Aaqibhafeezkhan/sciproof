@@ -47,6 +47,7 @@ says so in `environment.source`).
 
 `verify --rerun` runs the command in the manifest's directory. Before running, existing
 declared outputs are copied to a temporary directory; afterwards the files produced by the
-rerun are moved to `.sciproof-rerun-<timestamp>/` and your original outputs are restored, so
+rerun that differ from the originals are moved to `.sciproof-rerun-<timestamp>/` (nothing is
+moved, and no directory is created, if the rerun did not change an output) and your original outputs are restored, so
 checking evidence never overwrites the evidence. The command itself can still do anything the
 current user can do. See [SECURITY.md](../SECURITY.md).

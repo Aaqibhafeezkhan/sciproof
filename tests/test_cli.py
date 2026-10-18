@@ -150,7 +150,7 @@ def test_verify_json_with_rerun_keeps_stdout_pure_json(project, capsys):
     assert cli.main(["verify", "exp.sciproof.json", "--rerun", "--yes", "--json"]) == cli.EXIT_OK
     report = _json_report(capsys)  # would raise if anything but JSON was printed
     assert report["rerun_requested"] is True
-    assert report["rerun_outputs_dir"].startswith(".sciproof-rerun-")
+    assert report["rerun_outputs_dir"] is None  # identical outputs: nothing was moved aside
 
 
 def test_verify_json_escapes_control_characters_from_the_manifest(project, capsys):

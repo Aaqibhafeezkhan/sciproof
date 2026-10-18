@@ -8,7 +8,7 @@ import pytest
 
 from sciproof import verify as verify_module
 from sciproof.errors import ConfirmationRequired, UsageError
-from sciproof.verify import Status, verify
+from sciproof.verify import Status, format_report, verify
 
 
 def _status(report, subject_part):
@@ -164,14 +164,57 @@ def test_rerun_keeps_directories_that_existed_before(project):
     assert (project.root / "out" / "extra.txt").read_text() == "unrelated"
 
 
-def test_two_reruns_in_the_same_second_use_different_directories(project):
+def test_two_reruns_in_the_same_second_use_different_directories(project, monkeypatch):
     project.capture()
+    monkeypatch.setenv("SCIPROOF_TEST_SUFFIX", "b")  # the reruns write different output
     first = verify(project.manifest, rerun=True, assume_yes=True)
     second = verify(project.manifest, rerun=True, assume_yes=True)
     assert first.rerun_outputs_dir and second.rerun_outputs_dir
     assert first.rerun_outputs_dir != second.rerun_outputs_dir
     assert (project.root / first.rerun_outputs_dir).is_dir()
     assert (project.root / second.rerun_outputs_dir).is_dir()
+
+
+def test_a_timed_out_rerun_moves_nothing_and_says_nothing_false(project):
+    project.capture()
+    original = (project.root / "out" / "exact.txt").read_text()
+    _edit_manifest(
+        project,
+        lambda m: m["command"].update(argv=[sys.executable, "-c", "import time; time.sleep(30)"]),
+    )
+    report = verify(project.manifest, rerun=True, assume_yes=True, timeout=1)
+    assert report.status is Status.INCONCLUSIVE
+    assert report.rerun_outputs_dir is None
+    assert not list(project.root.glob(".sciproof-rerun-*"))
+    assert (project.root / "out" / "exact.txt").read_text() == original
+    assert "moved" not in format_report(report)
+
+
+def test_a_command_that_cannot_start_leaves_no_rerun_directory(project):
+    project.capture()
+    _edit_manifest(
+        project, lambda m: m["command"].update(argv=["this-command-does-not-exist-sciproof"])
+    )
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    assert report.status is Status.INCONCLUSIVE
+    assert not list(project.root.glob(".sciproof-rerun-*"))
+
+
+def test_a_rerun_that_reproduces_the_outputs_exactly_leaves_no_directory(project):
+    project.capture()
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    assert report.status is Status.PASS
+    assert report.rerun_outputs_dir is None
+    assert not list(project.root.glob(".sciproof-rerun-*"))
+
+
+def test_an_output_deleted_by_the_rerun_is_restored(project):
+    project.capture()
+    original = (project.root / "out" / "exact.txt").read_text()
+    code = "import os; os.remove('out/exact.txt')"
+    _edit_manifest(project, lambda m: m["command"].update(argv=[sys.executable, "-c", code]))
+    verify(project.manifest, rerun=True, assume_yes=True)
+    assert (project.root / "out" / "exact.txt").read_text() == original
 
 
 def test_rerun_detects_a_different_exact_output(project, monkeypatch):
