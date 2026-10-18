@@ -11,10 +11,12 @@ import csv
 import io
 import json
 import math
+import re
 from pathlib import Path
 from typing import Any
 
 from sciproof.errors import SciProofError
+from sciproof.jsonstrict import reject_duplicate_keys
 
 MAX_NUMERIC_FILE_BYTES = 64 * 1024 * 1024
 MAX_REPORTED_DIFFERENCES = 10
@@ -64,7 +66,7 @@ def load_numeric(path: Path) -> list[Leaf]:
     leaves: list[Leaf] = []
     if suffix == ".json":
         try:
-            _flatten_json(json.loads(text), "$", leaves)
+            _flatten_json(json.loads(text, object_pairs_hook=reject_duplicate_keys), "$", leaves)
         except (ValueError, RecursionError) as exc:
             raise NumericFormatError(f"{path.name} is not valid JSON: {exc}") from exc
         return leaves
@@ -163,9 +165,35 @@ def _numbers_close(a: float, b: float, rtol: float, atol: float) -> bool:
     return abs(a - b) <= max(rtol * max(abs(a), abs(b)), atol)
 
 
+_CSV_CELL = re.compile(r"r(\d+)c(\d+)")
+
+
+def _csv_headers(leaves: list[Leaf]) -> dict[int, str]:
+    """Column index -> header text, taken from the first CSV row (empty for other formats)."""
+    headers: dict[int, str] = {}
+    for location, value in leaves:
+        match = _CSV_CELL.fullmatch(location)
+        if match and match.group(1) == "0" and isinstance(value, str):
+            headers[int(match.group(2))] = value
+    return headers
+
+
+def _describe(location: str, headers: dict[int, str]) -> str:
+    """Add the CSV column name to a cell location, e.g. ``r2c1 (column 'loss')``."""
+    match = _CSV_CELL.fullmatch(location)
+    if match and match.group(1) != "0" and int(match.group(2)) in headers:
+        return f"{location} (column {_short(headers[int(match.group(2))], 40)})"
+    return location
+
+
 def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) -> list[str]:
-    """Return human-readable differences (empty list means equivalent within tolerance)."""
+    """Return human-readable differences (empty list means equivalent within tolerance).
+
+    Locations are ``$.key[index]`` for JSON, ``rNcM`` (row, column; row 0 is the first line,
+    usually the header) for CSV, and ``data[i, j]`` for arrays.
+    """
     differences: list[str] = []
+    headers = _csv_headers(expected)
 
     def note(message: str) -> bool:
         differences.append(message)
@@ -197,6 +225,8 @@ def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) 
             # True == 1 in Python, but a boolean is not a number in the data
             different = type(val_e) is not type(val_a) or val_e != val_a
             detail = ""
-        if different and note(f"{loc_e}: recorded {_short(val_e)}, found {_short(val_a)}{detail}"):
+        if different and note(
+            f"{_describe(loc_e, headers)}: recorded {_short(val_e)}, found {_short(val_a)}{detail}"
+        ):
             break
     return differences
