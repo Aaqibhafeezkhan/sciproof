@@ -33,12 +33,16 @@ Bitwise reproducibility across different hardware or platforms is **not** promis
 ## Install
 
 ```bash
-git clone https://github.com/hayagrivai-labs/sciproof.git && cd sciproof
-python -m pip install -e .          # Python 3.11+
+pipx install sciproof               # or: python -m pip install sciproof   (Python 3.11+)
 sciproof --version
 ```
 
-(Not published on PyPI yet.)
+From source (for development):
+
+```bash
+git clone https://github.com/hayagrivai-labs/sciproof.git && cd sciproof
+python -m pip install -e ".[dev]"
+```
 
 ## Quick start
 
