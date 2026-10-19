@@ -8,6 +8,12 @@ All notable changes are listed here. The format follows
 
 ### Added
 
+* `sciproof suggest-inputs -- COMMAND`: runs a Python command once and lists the files it read
+  that are not declared. It exits with `2` (inconclusive) when its audit hook never started
+  (the command is not Python, or Python ran with `-I`/`-S`), instead of claiming that nothing
+  was missed. The log is hex-encoded so a file name with a line break cannot corrupt it, and
+  SciProof's own files (`*.sciproof.json`, `*.sciproof.d/`, rerun directories) are never
+  suggested.
 * `verify` explains its verdict. The text report ends with a `basis:` line (why the verdict was
   chosen) and `not checked:` lines (what was not established); `verify --json` is now a versioned
   document (`schema: "sciproof.report"`, `schema_version: "1.0"`) with `reason`, `counts`,
@@ -49,5 +55,11 @@ All notable changes are listed here. The format follows
 
 ### Fixed
 
+* The manifests, snapshots and rerun directories that SciProof writes itself no longer make
+  the Git working tree count as "dirty" in the next capture or verification.
+* Path names that mean something else on Windows (reserved device names such as `aux.txt`, a
+  trailing dot or space, control characters) are refused in manifests, and the directory scan
+  refuses them with the same rules, so `capture` reports the file name instead of failing late
+  with an "invalid manifest" error.
 * Ambiguous JSON (repeated keys) could be accepted as evidence with a different value than other
   parsers would read.

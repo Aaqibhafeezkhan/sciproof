@@ -31,7 +31,36 @@ def validate_relative_path(value: object, *, allow_dot: bool = False) -> str:
     parts = value.split("/")
     if any(part in ("", ".", "..") for part in parts):
         raise UnsafePathError(f"path {value!r} contains empty, '.' or '..' components")
+    for part in parts:
+        _check_portable_component(value, part)
     return value
+
+
+_WINDOWS_DEVICE_NAMES = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{n}" for n in range(1, 10)),
+        *(f"LPT{n}" for n in range(1, 10)),
+    }
+)
+
+
+def _check_portable_component(path: str, part: str) -> None:
+    """Refuse names that mean something else on Windows.
+
+    Windows ignores trailing dots and spaces (``trail.`` is the file ``trail``, ``...`` is the
+    current directory) and treats ``CON``, ``NUL``, ``COM1`` ... (with any extension) as devices.
+    A manifest has to mean the same thing on every platform, so such names are not accepted.
+    """
+    if any(ord(char) < 32 for char in part):
+        raise UnsafePathError(f"path {path!r} contains a control character")
+    if part.endswith((".", " ")):
+        raise UnsafePathError(f"path {path!r} has a component ending with '.' or a space")
+    if part.split(".", 1)[0].upper() in _WINDOWS_DEVICE_NAMES:
+        raise UnsafePathError(f"path {path!r} uses a reserved Windows device name")
 
 
 def resolve_inside(base: Path, relative: str) -> Path:
