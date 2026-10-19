@@ -43,6 +43,7 @@ export default defineConfig({
             { label: 'CLI reference', slug: 'docs/cli-reference' },
             { label: 'Manifest format', slug: 'docs/manifest' },
             { label: 'Exit codes', slug: 'docs/exit-codes' },
+            { label: 'Python API', slug: 'docs/python-api' },
             { label: 'Verification report', slug: 'docs/report' },
             { label: 'Numeric comparison rules', slug: 'docs/numeric-comparison' },
             { label: 'Using SciProof in CI', slug: 'docs/ci' },

@@ -53,6 +53,8 @@ this machine.
   "counts": {"PASS": 2, "FAIL": 1, "INCONCLUSIVE": 0},
   "rerun_requested": false,
   "rerun_executed": false,
+  "clean_env": false,
+  "env_passed": [],
   "checks": [
     {
       "status": "FAIL",
@@ -85,6 +87,9 @@ are added within `1.x`; a field is only removed or changed in a new major versio
 | `input_integrity`, `output_integrity`, `snapshot_integrity`, `rerun_output_exact` | digest comparisons | `path`, `expected_sha256`, `actual_sha256` (`null` when the file is absent) |
 | `exit_code` | rerun | `recorded`, `rerun` |
 | `rerun_output_numeric` | rerun of a `--output-numeric` file | `path`, `rtol`, `atol`, `rule`, `differences` (list, empty when equivalent; `null` when the file could not be compared), `error` |
+
+`clean_env` is true when the rerun used `--clean-env`; `env_passed` then lists the *names*
+(never the values) of the environment variables the command received.
 
 The report is a statement about the checks listed in it. It does not claim that the experiment
 as a whole is reproducible, and it is not signed.

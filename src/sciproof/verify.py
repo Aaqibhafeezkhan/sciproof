@@ -18,14 +18,19 @@ import json
 import math
 import shutil
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from sciproof.environment import interpreter_info, platform_info, selected_env_vars
+from sciproof.environment import (
+    clean_environment,
+    interpreter_info,
+    platform_info,
+    selected_env_vars,
+)
 from sciproof.errors import ConfirmationRequired, UnsafePathError, UsageError
 from sciproof.gitinfo import git_info
 from sciproof.hashing import sha256_bytes, sha256_file
@@ -84,6 +89,10 @@ class Report:
     info: list[str] = field(default_factory=list)
     rerun_outputs_dir: str | None = None
     rerun_executed: bool = False
+    #: True when the rerun got a reduced environment (--clean-env).
+    clean_env: bool = False
+    #: Names (never values) of the variables handed to a --clean-env rerun.
+    env_passed: list[str] = field(default_factory=list)
 
     def add(
         self,
@@ -102,6 +111,10 @@ class Report:
         if Status.INCONCLUSIVE in statuses or not statuses:
             return Status.INCONCLUSIVE
         return Status.PASS
+
+    def to_dict(self) -> dict[str, Any]:
+        """The report as plain data, in the ``sciproof.report`` JSON schema (docs/REPORT.md)."""
+        return report_to_dict(self)
 
     @property
     def reason(self) -> str:
@@ -313,13 +326,25 @@ def _describe_command(manifest: dict[str, Any]) -> str:
     return " ".join(safe_text(part, limit=200) for part in manifest["command"]["argv"])
 
 
-def _rerun_prompt(base: Path, manifest: dict[str, Any]) -> str:
+def _rerun_prompt(base: Path, manifest: dict[str, Any], env_names: list[str] | None) -> str:
+    if env_names is None:
+        environment = (
+            "It also receives ALL of your environment variables, including any credentials "
+            "(use --clean-env to pass only a minimal set). "
+        )
+    else:
+        environment = (
+            f"It receives a reduced environment: {', '.join(env_names) or '(nothing)'}. "
+            "Files and the network remain fully accessible to it. "
+        )
     return (
         "SciProof is about to EXECUTE the command recorded in this manifest:\n\n"
         f"    {_describe_command(manifest)}\n\n"
         f"    working directory: {base}\n\n"
         "It will run with your current user's permissions and can read, change or delete "
-        "anything you can. A manifest is untrusted input: only continue if you trust its "
+        "anything you can. "
+        + environment
+        + "A manifest is untrusted input: only continue if you trust its "
         "source and have read the command above."
     )
 
@@ -444,6 +469,7 @@ def _rerun(
     snapshots: dict[str, Path | None],
     report: Report,
     timeout: float | None,
+    env: dict[str, str] | None = None,
 ) -> None:
     """Run the command once. The tree is left as it was: new outputs are moved aside."""
     output_paths = [item["path"] for item in manifest["outputs"]]
@@ -465,7 +491,12 @@ def _rerun(
                 had_original.add(relative)
 
         try:
-            result = run_command(manifest["command"]["argv"], base, timeout)
+            argv = manifest["command"]["argv"]
+            result = (
+                run_command(argv, base, timeout)
+                if env is None
+                else run_command(argv, base, timeout, env)
+            )
         except CommandTimeout as exc:
             report.add(Status.INCONCLUSIVE, "rerun", str(exc))
             return
@@ -533,6 +564,8 @@ def verify(
     strict_env: bool = False,
     timeout: float | None = DEFAULT_RERUN_TIMEOUT_SECONDS,
     confirm: Callable[[str], bool] | None = None,
+    clean_env: bool = False,
+    pass_env: Sequence[str] = (),
 ) -> Report:
     """Verify ``manifest_path``.
 
@@ -543,6 +576,10 @@ def verify(
     """
     if timeout is not None and not (math.isfinite(timeout) and timeout > 0):
         raise UsageError("timeout must be a positive number of seconds")
+    if clean_env and not rerun:
+        raise UsageError("--clean-env only applies to --rerun")
+    if pass_env and not clean_env:
+        raise UsageError("--pass-env needs --clean-env (without it nothing is filtered)")
     manifest_path = manifest_path.resolve()
     manifest = load_manifest(manifest_path)
     base = manifest_path.parent
@@ -591,7 +628,13 @@ def verify(
         report.add(Status.INCONCLUSIVE, "rerun", f"not attempted: unsafe path ({exc})")
         return report
 
-    prompt = _rerun_prompt(base, manifest)
+    rerun_env: dict[str, str] | None = None
+    unset: list[str] = []
+    if clean_env:
+        rerun_env, unset = clean_environment(pass_env)
+        report.clean_env = True
+        report.env_passed = sorted(rerun_env)
+    prompt = _rerun_prompt(base, manifest, report.env_passed if clean_env else None)
     if not assume_yes:
         if confirm is None:
             raise ConfirmationRequired(
@@ -625,7 +668,14 @@ def verify(
     if current_git and current_git["dirty"]:
         report.info.append("the current Git working tree has uncommitted changes")
 
-    _rerun(base, manifest, snapshots, report, timeout)
+    _rerun(base, manifest, snapshots, report, timeout, rerun_env)
+    if clean_env:
+        report.info.append(
+            "the rerun received a reduced environment (--clean-env); this limits which "
+            "variables it can read, not which files or network it can reach"
+        )
+        if unset:
+            report.info.append("requested with --pass-env but not set: " + ", ".join(unset))
     report.info.append(
         "scope: integrity and one re-execution. Bitwise agreement across different hardware "
         "or platforms is not expected; agreement is not a proof of scientific correctness."
@@ -647,6 +697,8 @@ def report_to_dict(report: Report) -> dict[str, Any]:
         "counts": counts,
         "rerun_requested": report.rerun_requested,
         "rerun_executed": report.rerun_executed,
+        "clean_env": report.clean_env,
+        "env_passed": list(report.env_passed),
         "checks": [
             {
                 "status": c.status.value,

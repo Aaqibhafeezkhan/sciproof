@@ -132,6 +132,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="with --rerun: report INCONCLUSIVE if the environment differs",
     )
     ver.add_argument(
+        "--clean-env",
+        action="store_true",
+        help="with --rerun: give the command only a minimal environment (PATH, temp "
+        "directories, numerics-related variables) instead of all of yours, including credentials",
+    )
+    ver.add_argument(
+        "--pass-env",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="with --clean-env: also pass this environment variable; repeatable",
+    )
+    ver.add_argument(
         "--timeout",
         type=float,
         default=DEFAULT_RERUN_TIMEOUT_SECONDS,
@@ -209,6 +222,8 @@ def _run_verify(args: argparse.Namespace) -> int:
         strict_env=args.strict_env,
         timeout=args.timeout,
         confirm=_confirm if args.rerun and not args.yes else None,
+        clean_env=args.clean_env,
+        pass_env=args.pass_env,
     )
     print(format_report_json(report) if args.json else format_report(report))
     return _STATUS_EXIT[report.status]

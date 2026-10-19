@@ -47,10 +47,13 @@ own team to a protected branch.
 * Keep `permissions` minimal (`contents: read`) and expose no secrets to the job.
 * Add `--strict-env` if a rerun on a different Python version or platform should be reported as
   `INCONCLUSIVE` instead of being attempted.
+* Add `--clean-env` so the recorded command receives only a minimal environment. Without it the
+  command sees every variable of the job, including any token you exposed. Pass what it
+  really needs with `--pass-env NAME`. This does not restrict files or network access.
 
 ```yaml
       - name: Re-execute the recorded command (trusted manifests only)
-        run: sciproof verify baseline.sciproof.json --rerun --yes --strict-env --json
+        run: sciproof verify baseline.sciproof.json --rerun --yes --strict-env --clean-env --json
 ```
 
 Details: [Security and threat model](../SECURITY.md).
