@@ -72,7 +72,7 @@ or risk. "Diff." is verified differentiation against the audited projects.
 | C. Numeric comparison audit (duplicate keys, labels, rtol warning, documented rules) | 4 | 4 | 5 | 5 | 5 | 4 | 4 | **Done** |
 | E. Safe reruns: opt-in clean environment, documented limits | 4 | 3 | 4 | 5 | 4 | 5 | 3 | Next |
 | G. Documented Python API alongside the CLI | 4 | 2 | 4 | 4 | 3 | 5 | 5 | Next |
-| Directory artifacts (issue #5) | 4 | 2 | 3 | 4 | 3 | 4 | 4 | Next |
+| Directory artifacts (issue #5) | 4 | 2 | 3 | 4 | 3 | 4 | 4 | **Done** |
 | B. Verification policy file | 3 | 4 | 3 | 4 | 2 | 4 | 3 | Wait for evidence |
 | D. More provenance (resource metadata, config capture) | 3 | 2 | 4 | 3 | 3 | 4 | 3 | Wait for evidence |
 | F. Portable evidence bundle | 3 | 3 | 2 | 4 | 2 | 3 | 3 | Wait; see [signing](DESIGN_SIGNING.md) and [RO-Crate](DESIGN_RO_CRATE.md) notes |
@@ -93,8 +93,9 @@ noWorkflow and ReproZip are strong and where SciProof would only be a weaker cop
 4. **A documented Python API.** `verify()` and `capture()` already exist. Export and document a
    small, stable surface (`verify_manifest(path) -> report dict`) so it can be used from pytest and
    notebooks. Persona 2 asked for CI first, notebooks second.
-5. **Directory artifacts.** ReproLedger already hashes directories as sorted trees; many
-   experiments write a directory of files, and `capture` currently refuses them.
+5. **Directory artifacts.** Done (schema 1.1): `--input DIR` and `--output DIR` record a
+   sorted file list and a tree digest, and verification names added, removed and modified
+   files. ReproLedger already hashed directories; this closes that gap.
 
 ## Explicitly excluded from the MVP
 

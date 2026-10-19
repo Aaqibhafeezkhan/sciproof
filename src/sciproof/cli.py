@@ -61,14 +61,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="PATH",
-        help="declare an input file (hashed before and after the run); repeatable",
+        help="declare an input file or directory (hashed before and after the run); repeatable",
     )
     cap.add_argument(
         "--output",
         action="append",
         default=[],
         metavar="PATH",
-        help="declare an output file compared by exact hash; repeatable",
+        help="declare an output file or directory compared by exact hash; repeatable",
     )
     cap.add_argument(
         "--output-numeric",

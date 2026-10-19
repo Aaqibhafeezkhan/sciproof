@@ -30,6 +30,13 @@ All notable changes are listed here. The format follows
   documented in `docs/PYTHON_API.md`, with a runnable `examples/api_usage.py`. The package
   ships a `py.typed` marker. `Report.to_dict()` returns the JSON report as data.
 
+* Directories as inputs and exact outputs (`--input DIR`, `--output DIR`, schema `1.1`): the
+  manifest records the sorted list of regular files and a tree digest, and verification and
+  `--rerun` name the files that were added, removed or modified. Symbolic links and special
+  files inside a declared directory are refused, there is a limit of 10,000 files, and the
+  originals of a directory output are restored after a rerun. Manifests without directories
+  stay at `1.0`. Closes #5.
+
 ### Changed
 
 * A repeated key in a JSON object is now an error in manifests and in numeric output files. It
@@ -37,6 +44,8 @@ All notable changes are listed here. The format follows
   manifests it created are unaffected.
 * `SECURITY.md` states that a confirmed rerun inherits the full environment of the calling
   process.
+
+* Declaring a path that is the capture's own manifest or snapshot directory is refused.
 
 ### Fixed
 

@@ -159,6 +159,11 @@ sciproof inspect MANIFEST
   `NAME.sciproof.json`. Numeric outputs are also copied to `NAME.sciproof.d/` (needed to compare
   with a tolerance; keep it next to the manifest).
 * Declared inputs must be read-only for the command; capture fails if the command changes one.
+* `--input` and `--output` accept a directory: every regular file below it is recorded, and a
+  verification names the files that were added, removed or modified. Symbolic links inside
+  are refused, empty directories are not recorded, and there is a limit of 10,000 files
+  ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/MANIFEST.md#directories)).
+  `--output-numeric` takes single files only.
 * A command that exits with a nonzero status is still recorded (capture then exits with `1`
   unless `--allow-nonzero`).
 * `--json` prints the verification report as a single JSON object (same exit codes), for CI

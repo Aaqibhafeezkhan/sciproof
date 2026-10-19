@@ -17,9 +17,12 @@ from typing import Any
 from sciproof.errors import ManifestError, UnsafePathError
 from sciproof.jsonstrict import reject_duplicate_keys
 from sciproof.paths import validate_relative_path
+from sciproof.treehash import MAX_TREE_FILES, tree_digest, tree_size
 
 SCHEMA = "sciproof.manifest"
 SCHEMA_VERSION = "1.0"
+# Written instead when the manifest contains a directory artifact (see docs/MANIFEST.md).
+SCHEMA_VERSION_DIRECTORIES = "1.1"
 SUPPORTED_MAJOR = 1
 MANIFEST_SUFFIX = ".sciproof.json"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
@@ -76,6 +79,56 @@ def _rel_path(value: Any, where: str) -> str:
         raise _fail(where, str(exc)) from exc
 
 
+def _check_kind(item: dict[str, Any], where: str, minor: int, present: bool) -> str:
+    """Validate ``kind`` and, for a directory, its file list. Returns the kind."""
+    kind = item.get("kind", "file")
+    if kind == "file":
+        if "files" in item:
+            raise _fail(f"{where}.files", "only a directory has a list of files")
+        return "file"
+    if kind != "directory":
+        raise _fail(f"{where}.kind", f"expected 'file' or 'directory', got {kind!r}")
+    if minor < 1:
+        raise _fail(f"{where}.kind", "directory entries need schema_version 1.1 or later")
+    files = item.get("files")
+    if not present:
+        if files:
+            raise _fail(f"{where}.files", "must be empty when the directory is not present")
+        return "directory"
+    if not isinstance(files, list):
+        raise _fail(f"{where}.files", "expected a list of files")
+    if len(files) > MAX_TREE_FILES:
+        raise _fail(f"{where}.files", f"more than {MAX_TREE_FILES} files")
+    seen: set[str] = set()
+    for index, entry in enumerate(files):
+        inner = f"{where}.files[{index}]"
+        entry = _as_dict(entry, inner)
+        path = _rel_path(entry.get("path"), f"{inner}.path")
+        if path in seen:
+            raise _fail(f"{inner}.path", f"duplicate path {path!r}")
+        seen.add(path)
+        _sha(entry.get("sha256"), f"{inner}.sha256")
+        _size(entry, inner)
+    if tree_digest(files) != item["sha256"]:
+        raise _fail(f"{where}.sha256", "does not match the digest of the listed files")
+    if tree_size(files) != item["size"]:
+        raise _fail(f"{where}.size", "does not match the sizes of the listed files")
+    return "directory"
+
+
+def check_nesting(declared: list[tuple[str, str]]) -> None:
+    """A declared path must not lie inside another declared directory."""
+    directories = [path for path, kind in declared if kind == "directory"]
+    for path, _ in declared:
+        for directory in directories:
+            if path != directory and path.startswith(directory + "/"):
+                raise _fail(
+                    "manifest",
+                    f"{path!r} lies inside the declared directory {directory!r}; declare "
+                    "either the directory or the file",
+                )
+
+
 def _finite_nonneg(value: Any, where: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise _fail(where, "expected a number")
@@ -102,6 +155,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
     match = VERSION_RE.fullmatch(version)
     if not match:
         raise _fail("schema_version", f"cannot parse version {version!r}")
+    minor = int(match.group(2))
     if int(match.group(1)) != SUPPORTED_MAJOR:
         raise ManifestError(
             f"unsupported manifest version {version!r}; this SciProof reads major version "
@@ -140,6 +194,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         _get(git, "commit", str, "git")
         _get(git, "dirty", bool, "git")
 
+    declared: list[tuple[str, str]] = []
     seen: set[str] = set()
     for index, item in enumerate(_get(manifest, "inputs", list, "manifest")):
         where = f"inputs[{index}]"
@@ -150,6 +205,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         seen.add(path)
         _sha(item.get("sha256"), f"{where}.sha256")
         _size(item, where)
+        declared.append((path, _check_kind(item, where, minor, present=True)))
 
     execution = _as_dict(_get(manifest, "execution", dict, "manifest"), "execution")
     _get(execution, "exit_code", int, "execution")
@@ -183,7 +239,12 @@ def validate_manifest(data: Any) -> dict[str, Any]:
                 raise _fail(where, "a numeric output must be present")
         elif mode != "exact":
             raise _fail(f"{where}.compare.mode", f"expected 'exact' or 'numeric', got {mode!r}")
+        kind = _check_kind(item, where, minor, present)
+        if kind == "directory" and mode != "exact":
+            raise _fail(f"{where}.compare.mode", "a directory can only be compared exactly")
+        declared.append((path, kind))
 
+    check_nesting(declared)
     return manifest
 
 

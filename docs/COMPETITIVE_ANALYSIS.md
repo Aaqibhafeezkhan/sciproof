@@ -52,8 +52,8 @@ in a clean virtual environment and run on the benchmark scenarios ([Benchmarks](
 * **Where SciProof is ahead [V]:** numeric tolerance comparison for JSON/CSV/`.npy`, an opt-in
   confirmed rerun with timeout, a three-valued verdict, environment comparison on rerun, and a
   structured explanation of the verdict ([Report](REPORT.md)).
-* **Where ReproLedger is ahead [V]:** a ledger of many runs (`list`, `diff`), directory
-  artifacts, canonical-JSON serialisation with a sidecar digest, secret redaction of environment
+* **Where ReproLedger is ahead [V]:** a ledger of many runs (`list`, `diff`),
+  canonical-JSON serialisation with a sidecar digest, secret redaction of environment
   variables, OpenLineage/in-toto-style export.
 
 ### VeriRepro: same ideas, different problem
