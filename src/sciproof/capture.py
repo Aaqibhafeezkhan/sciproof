@@ -12,7 +12,7 @@ from typing import Any
 
 from sciproof import __version__
 from sciproof.environment import interpreter_info, platform_info, selected_env_vars
-from sciproof.errors import CaptureError, SciProofError, UnsafePathError
+from sciproof.errors import CaptureError, ManifestError, SciProofError, UnsafePathError
 from sciproof.gitinfo import git_info
 from sciproof.hashing import sha256_file
 from sciproof.manifest import (
@@ -20,6 +20,8 @@ from sciproof.manifest import (
     NAME_RE,
     SCHEMA,
     SCHEMA_VERSION,
+    SCHEMA_VERSION_DIRECTORIES,
+    check_nesting,
     snapshot_dir_name,
     write_manifest,
 )
@@ -32,6 +34,7 @@ from sciproof.runner import (
     run_command,
     summarize_stream,
 )
+from sciproof.treehash import FileEntry, TreeError, scan_tree, tree_digest, tree_record
 
 DEFAULT_MAX_LOG_BYTES = 64 * 1024
 DEFAULT_RTOL = 1e-9
@@ -49,20 +52,60 @@ class CaptureResult:
         return int(self.manifest["execution"]["exit_code"])
 
 
+def _scan_directory(path: Path, what: str) -> list[FileEntry]:
+    try:
+        return scan_tree(path)
+    except TreeError as exc:
+        raise CaptureError(f"{what}: {exc}") from exc
+
+
+def _current_digest(path: Path, kind: str) -> str | None:
+    """Digest of a file or a directory tree as it is now; ``None`` if absent or unreadable."""
+    if kind == "directory":
+        if not path.is_dir():
+            return None
+        try:
+            return tree_digest(scan_tree(path))
+        except TreeError:
+            return None
+    return sha256_file(path)[0] if path.is_file() else None
+
+
 def _hash_inputs(base: Path, inputs: list[str]) -> list[dict[str, Any]]:
     records = []
     for relative in inputs:
         path = base / relative
         if path.is_dir():
-            raise CaptureError(
-                f"input {relative!r} is a directory; only files can be declared "
-                "(directory support is tracked in issue #5)"
-            )
+            entries = _scan_directory(path, f"input {relative!r}")
+            records.append({"path": relative, "kind": "directory", **tree_record(entries)})
+            continue
         if not path.is_file():
             raise CaptureError(f"input file not found: {relative}")
         digest, size = sha256_file(path)
         records.append({"path": relative, "sha256": digest, "size": size})
     return records
+
+
+def _numeric_directory_message(relative: str) -> str:
+    return (
+        f"{relative!r} is a directory; --output-numeric compares single .json, .csv or .npy "
+        "files. Declare the directory with --output (exact hashes) or its files individually."
+    )
+
+
+def _refuse_evidence_paths(declared: list[str], name: str) -> None:
+    """A declared path must not be one of the files this capture is about to write."""
+    snapshots = snapshot_dir_name(name)
+    for relative in declared:
+        if (
+            relative == f"{name}{MANIFEST_SUFFIX}"
+            or relative == snapshots
+            or (relative.startswith(snapshots + "/"))
+        ):
+            raise CaptureError(
+                f"{relative!r} is where the evidence of this capture is written; it cannot also "
+                "be declared as an input or output"
+            )
 
 
 def _unique(items: list[str], what: str) -> None:
@@ -112,6 +155,7 @@ def capture(
         raise CaptureError(str(exc)) from exc
     _unique(input_paths, "--input")
     _unique(exact_paths + numeric_paths, "--output/--output-numeric")
+    _refuse_evidence_paths(input_paths + exact_paths + numeric_paths, name)
     overlap = set(input_paths) & set(exact_paths + numeric_paths)
     if overlap:
         raise CaptureError(f"a file cannot be both input and output: {sorted(overlap)[0]}")
@@ -127,15 +171,24 @@ def capture(
 
     warnings: list[str] = []
     input_records = _hash_inputs(base, input_paths)
-    before = {}
+    input_directories = [r["path"] for r in input_records if r.get("kind") == "directory"]
+    for relative in input_paths + exact_paths + numeric_paths:
+        for directory in input_directories:
+            if relative != directory and relative.startswith(directory + "/"):
+                raise CaptureError(
+                    f"{relative!r} lies inside the declared input directory {directory!r}; "
+                    "declare either the directory or the file"
+                )
+    before: dict[str, str | None] = {}
     for relative in exact_paths + numeric_paths:
         target = base / relative
         if target.is_dir():
-            raise CaptureError(
-                f"output {relative!r} is a directory; only files can be declared "
-                "(directory support is tracked in issue #5)"
-            )
-        before[relative] = sha256_file(target)[0] if target.is_file() else None
+            if relative in numeric_paths:
+                raise CaptureError(_numeric_directory_message(relative))
+            entries = _scan_directory(target, f"output {relative!r}")
+            before[relative] = tree_digest(entries)
+        else:
+            before[relative] = sha256_file(target)[0] if target.is_file() else None
 
     if numeric_paths and rtol >= 1:
         warnings.append(
@@ -163,9 +216,7 @@ def capture(
 
     # The command must treat declared inputs as read-only, otherwise the evidence is meaningless.
     for record in input_records:
-        digest, _ = (
-            sha256_file(base / record["path"]) if (base / record["path"]).is_file() else (None, 0)
-        )
+        digest = _current_digest(base / record["path"], record.get("kind", "file"))
         if digest != record["sha256"]:
             raise CaptureError(
                 f"the command modified or removed the declared input {record['path']!r}; "
@@ -184,7 +235,17 @@ def capture(
             numeric = relative in numeric_paths
             target = base / relative
             record: dict[str, Any] = {"path": relative}
-            if target.is_file():
+            if target.is_dir():
+                if numeric:
+                    raise CaptureError(_numeric_directory_message(relative))
+                entries = _scan_directory(target, f"output {relative!r}")
+                tree = tree_record(entries)
+                record.update(present=True, kind="directory", **tree)
+                if before[relative] == tree["sha256"]:
+                    warnings.append(
+                        f"output {relative!r} existed before the run and was not changed by it"
+                    )
+            elif target.is_file():
                 digest, size = sha256_file(target)
                 record.update(present=True, sha256=digest, size=size)
                 if before[relative] == digest:
@@ -225,9 +286,15 @@ def capture(
                 record["compare"] = {"mode": "exact"}
             output_records.append(record)
 
+        declared = [(r["path"], r.get("kind", "file")) for r in input_records + output_records]
+        try:
+            check_nesting(declared)
+        except ManifestError as exc:
+            raise CaptureError(str(exc).removeprefix("invalid manifest: manifest: ")) from exc
+        has_directory = any(kind == "directory" for _, kind in declared)
         manifest: dict[str, Any] = {
             "schema": SCHEMA,
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": SCHEMA_VERSION_DIRECTORIES if has_directory else SCHEMA_VERSION,
             "name": name,
             "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "tool": {"name": "sciproof", "version": __version__},

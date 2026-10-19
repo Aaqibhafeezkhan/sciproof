@@ -128,10 +128,15 @@ def test_missing_input_is_an_error(project):
         project.capture(inputs=["data.json", "does-not-exist.csv"])
 
 
-def test_a_directory_as_input_is_reported_as_such(project):
+def test_a_directory_as_input_is_recorded_as_a_tree(project):
+    """Directories became supported in schema 1.1 (see tests/test_directories.py)."""
     (project.root / "folder").mkdir()
-    with pytest.raises(CaptureError, match="is a directory"):
-        project.capture(inputs=["data.json", "folder"])
+    (project.root / "folder" / "a.txt").write_text("a")
+    result = project.capture(inputs=["data.json", "folder"])
+    entry = next(item for item in result.manifest["inputs"] if item["path"] == "folder")
+    assert entry["kind"] == "directory"
+    assert [f["path"] for f in entry["files"]] == ["a.txt"]
+    assert result.manifest["schema_version"] == "1.1"
 
 
 def test_a_directory_as_output_is_reported_as_such(project):

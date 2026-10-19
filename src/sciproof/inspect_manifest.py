@@ -11,6 +11,13 @@ from sciproof.textutil import safe_text
 _PREVIEW_LINES = 8
 
 
+def _kind(item: dict[str, Any]) -> str:
+    """Words that tell a directory (and how many files it holds) apart from a file."""
+    if item.get("kind") == "directory":
+        return f"directory, {len(item.get('files') or [])} files, tree "
+    return ""
+
+
 def _stream_preview(stream: dict[str, Any]) -> list[str]:
     text = stream["text"]
     if not text.strip():
@@ -57,7 +64,7 @@ def describe(manifest: dict[str, Any]) -> str:
 
     lines += ["", f"Inputs ({len(manifest['inputs'])}):"]
     lines += [
-        f"  {safe_text(i['path'])}  sha256:{i['sha256'][:16]}...  {i['size']} bytes"
+        f"  {safe_text(i['path'])}  {_kind(i)}sha256:{i['sha256'][:16]}...  {i['size']} bytes"
         for i in manifest["inputs"]
     ] or ["  (none)"]
 
@@ -78,7 +85,7 @@ def describe(manifest: dict[str, Any]) -> str:
             how = "exact hash"
         if item["present"]:
             lines.append(
-                f"  {safe_text(item['path'])}  sha256:{item['sha256'][:16]}...  "
+                f"  {safe_text(item['path'])}  {_kind(item)}sha256:{item['sha256'][:16]}...  "
                 f"{item['size']} bytes  compare: {how}"
             )
         else:

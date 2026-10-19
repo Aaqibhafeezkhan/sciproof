@@ -91,5 +91,11 @@ are added within `1.x`; a field is only removed or changed in a new major versio
 `clean_env` is true when the rerun used `--clean-env`; `env_passed` then lists the *names*
 (never the values) of the environment variables the command received.
 
+For a directory, the digest fields hold the tree digests and the evidence adds
+`artifact: "directory"`, `files_expected`, `files_actual` and `tree`, which has `added`,
+`removed` and `modified` (at most 10 names each) with `added_count`, `removed_count` and
+`modified_count`; `tree` is `null` when nothing differs. A directory that cannot be read
+as evidence (a symbolic link inside) has a `problem` string instead.
+
 The report is a statement about the checks listed in it. It does not claim that the experiment
 as a whole is reproducible, and it is not signed.
