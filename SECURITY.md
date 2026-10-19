@@ -42,8 +42,11 @@ the same source: it contains a command.
   the environment of the process that runs `sciproof verify --rerun`, including variables such as
   `AWS_SECRET_ACCESS_KEY` or `GITHUB_TOKEN`, so a manifest from someone else can read them. The
   allowlist described above only limits what is *recorded*, not what the command can *see*.
-  Start untrusted reruns from a shell without credentials (for example `env -i` plus the variables
-  you need, or a fresh container).
+  Use `verify --rerun --clean-env` (add variables with `--pass-env NAME`) to hand the command only
+  `PATH`, temp directories and the numerics-related allowlist; the report lists the *names* that
+  were passed, never values. `--clean-env` does not restrict files, network or processes, so it
+  reduces what an untrusted command can read from the environment and is not a sandbox. For
+  untrusted manifests still use a disposable VM or container.
 * **Manifests are not signed.** Hashes detect accidental or naive changes after capture; they
   do not stop someone who can rewrite both the manifest and the files from fabricating
   consistent evidence. Distribute manifests through a channel you trust (signed Git commits,

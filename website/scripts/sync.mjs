@@ -54,6 +54,7 @@ const PAGES = [
   },
   { slug: 'manifest', title: 'Manifest format', source: 'docs/MANIFEST.md', description: 'The evidence manifest, field by field.' },
   { slug: 'exit-codes', title: 'Exit codes', source: 'docs/EXIT_CODES.md', description: 'Exit codes and verdicts of every command.' },
+  { slug: 'python-api', title: 'Python API', source: 'docs/PYTHON_API.md', description: 'Capture and verify from Python: functions, types and stability.' },
   { slug: 'report', title: 'Verification report', source: 'docs/REPORT.md', description: 'What a report contains, how verdicts are combined and the JSON report schema.' },
   { slug: 'numeric-comparison', title: 'Numeric comparison rules', source: 'docs/COMPARISON.md', description: 'The exact rules of the tolerance comparison for JSON, CSV and .npy outputs.' },
   { slug: 'ci', title: 'Using SciProof in CI', source: 'docs/CI.md', description: 'Verify evidence in a GitHub Actions job.' },

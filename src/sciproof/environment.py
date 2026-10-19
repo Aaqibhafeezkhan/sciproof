@@ -13,8 +13,11 @@ import re
 import shutil
 import subprocess  # noqa: S404  (used to ask the recorded interpreter for its version)
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
+
+from sciproof.errors import UsageError
 
 # Variables that influence numerical or locale behaviour and are not secret.
 ENV_ALLOWLIST = (
@@ -28,6 +31,11 @@ ENV_ALLOWLIST = (
     "NUMEXPR_NUM_THREADS",
     "CUDA_VISIBLE_DEVICES",
 )
+
+# What a command needs to start at all, passed by --clean-env. No home directory, no
+# credentials, no proxy or cloud settings: those must be requested with --pass-env.
+CLEAN_ENV_BASE = ("PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "TMPDIR", "TEMP", "TMP")
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 PROBE_TIMEOUT_SECONDS = 30
 
@@ -60,6 +68,35 @@ def platform_info() -> dict[str, str]:
 def selected_env_vars(environ: dict[str, str] | None = None) -> dict[str, str]:
     environ = os.environ if environ is None else environ
     return {name: environ[name] for name in ENV_ALLOWLIST if name in environ}
+
+
+def clean_environment(
+    extra: Iterable[str] = (), environ: Mapping[str, str] | None = None
+) -> tuple[dict[str, str], list[str]]:
+    """Build a minimal environment for a rerun.
+
+    Contains only the variables a program needs to start (``CLEAN_ENV_BASE``), the
+    numerics-related allowlist (``ENV_ALLOWLIST``) and the variables named in ``extra``,
+    each only if it is set. Returns ``(environment, requested_but_unset)``. Names are
+    matched case-insensitively on Windows, where variable names are case-insensitive.
+    """
+    source = os.environ if environ is None else environ
+    wanted = list(CLEAN_ENV_BASE) + list(ENV_ALLOWLIST)
+    explicit = []
+    for name in extra:
+        if not _ENV_NAME.fullmatch(name):
+            raise UsageError(f"{name!r} is not a valid environment variable name")
+        explicit.append(name)
+    wanted += explicit
+    fold = (lambda text: text.upper()) if sys.platform == "win32" else (lambda text: text)
+    available = {fold(key): key for key in source}
+    result: dict[str, str] = {}
+    for name in wanted:
+        key = available.get(fold(name))
+        if key is not None:
+            result[key] = source[key]
+    unset = [name for name in explicit if fold(name) not in available]
+    return result, unset
 
 
 def _own_interpreter_info() -> dict[str, Any]:

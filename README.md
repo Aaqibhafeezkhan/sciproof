@@ -150,7 +150,8 @@ A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/T
 sciproof capture --name NAME [--input P]... [--output P]... [--output-numeric P]...
                  [--rtol X] [--atol Y] [--timeout S] [--max-log-bytes N]
                  [--force] [--allow-nonzero] -- COMMAND [ARGS...]
-sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--timeout S] [--json]
+sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--clean-env]
+                 [--pass-env NAME]... [--timeout S] [--json]
 sciproof inspect MANIFEST
 ```
 
@@ -164,6 +165,13 @@ sciproof inspect MANIFEST
   and scripts. Prompts and errors go to stderr, so stdout stays valid JSON.
 * `--strict-env` makes a rerun `INCONCLUSIVE` (without executing) if Python version, platform
   or recorded package versions differ.
+* `--clean-env` gives a rerun only a minimal environment (`PATH`, temp directories and the
+  numerics-related variables SciProof records) instead of all of yours, so a manifest from
+  someone else cannot read your credentials from it. `--pass-env NAME` adds a variable. It
+  limits environment variables only: the command can still read your files and use the
+  network, so it is not a sandbox.
+
+Python API: [docs/PYTHON_API.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/PYTHON_API.md).
 
 Manifest format: [docs/MANIFEST.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/MANIFEST.md).
 

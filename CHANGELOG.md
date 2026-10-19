@@ -22,6 +22,13 @@ All notable changes are listed here. The format follows
   and verified facts for DVC, ReproZip and MLflow.
 * `benchmarks/run_benchmarks.py`: eight reproducible verification scenarios.
 * Tests: report schema and aggregation, and one test per numeric comparison rule.
+* `verify --rerun --clean-env` (with `--pass-env NAME`) runs the recorded command with a
+  minimal environment instead of a copy of yours; the report lists the passed variable
+  names. The confirmation prompt now says which environment the command gets.
+* A supported Python API: `capture_experiment`, `verify_manifest`, `load_manifest`,
+  `report_to_dict`, `Report`, `Check`, `Status`, `CaptureResult` and the exception types,
+  documented in `docs/PYTHON_API.md`, with a runnable `examples/api_usage.py`. The package
+  ships a `py.typed` marker. `Report.to_dict()` returns the JSON report as data.
 
 ### Changed
 

@@ -8,6 +8,7 @@ import signal
 import subprocess  # noqa: S404
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -69,8 +70,16 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
         process.wait()
 
 
-def run_command(argv: list[str], cwd: Path, timeout: float | None) -> ExecResult:
+def run_command(
+    argv: list[str],
+    cwd: Path,
+    timeout: float | None,
+    env: Mapping[str, str] | None = None,
+) -> ExecResult:
     """Run ``argv`` (never through a shell) in ``cwd`` with the current user's permissions.
+
+    ``env`` is the complete environment of the command; ``None`` means a copy of the
+    environment of this process.
 
     Standard input is closed so that the command can never wait for terminal input. The command
     runs in its own process group (session on POSIX), so a timeout or Ctrl+C stops everything it
@@ -87,6 +96,7 @@ def run_command(argv: list[str], cwd: Path, timeout: float | None) -> ExecResult
             argv,
             cwd=cwd,
             stdin=subprocess.DEVNULL,
+            env=None if env is None else dict(env),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             **options,
