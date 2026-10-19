@@ -18,6 +18,7 @@ from sciproof import __version__
 from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, capture
 from sciproof.errors import ConfirmationRequired, SciProofError
 from sciproof.inspect_manifest import inspect_file
+from sciproof.suggest import suggest_inputs
 from sciproof.textutil import safe_text
 from sciproof.verify import (
     DEFAULT_RERUN_TIMEOUT_SECONDS,
@@ -158,6 +159,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="print the report as one JSON object (exit codes are unchanged)",
     )
 
+    sug = sub.add_parser(
+        "suggest-inputs",
+        help="run a Python command once and list files it read that are not declared",
+        description=(
+            "Run COMMAND once and list the files it opened for reading that are not covered "
+            "by --input/--output. Only reads made by Python code are seen."
+        ),
+    )
+    sug.add_argument("--input", action="append", default=[], metavar="PATH")
+    sug.add_argument("--output", action="append", default=[], metavar="PATH")
+    sug.add_argument("--timeout", type=float, default=None, metavar="SECONDS")
+    sug.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND [ARGS...]")
+
     ins = sub.add_parser("inspect", help="show a readable summary; never executes anything")
     ins.add_argument("manifest", type=Path)
     return parser
@@ -214,6 +228,28 @@ def _run_capture(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_suggest(args: argparse.Namespace) -> int:
+    command = list(args.cmd)
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        raise SciProofError("no command given; usage: sciproof suggest-inputs [options] -- COMMAND")
+    found = suggest_inputs(command, Path.cwd(), args.input + args.output, args.timeout)
+    if found.exit_code != 0:
+        print(f"warning: the command exited with status {found.exit_code}", file=sys.stderr)
+    for path in found.inside:
+        print(f"suggest --input {safe_text(path)}")
+    for path in found.outside:
+        print(f"read outside the working directory (cannot be declared): {safe_text(path)}")
+    if not (found.inside or found.outside):
+        print("no undeclared files were read by Python code")
+    print(
+        "Note: only reads made by Python code are seen (not C extensions, other programs, "
+        "network or environment variables)."
+    )
+    return EXIT_OK
+
+
 def _run_verify(args: argparse.Namespace) -> int:
     report = verify(
         args.manifest,
@@ -251,6 +287,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_capture(args)
         if args.command_name == "verify":
             return _run_verify(args)
+        if args.command_name == "suggest-inputs":
+            return _run_suggest(args)
         print(inspect_file(args.manifest))
         return EXIT_OK
     except SciProofError as exc:
