@@ -19,6 +19,7 @@ from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, 
 from sciproof.diffmanifests import diff_manifests, format_diff_json
 from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
 from sciproof.inspect_manifest import inspect_file
+from sciproof.signing import sign_manifest
 from sciproof.suggest import suggest_inputs
 from sciproof.textutil import safe_text
 from sciproof.verify import (
@@ -147,6 +148,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="with --clean-env: also pass this environment variable; repeatable",
     )
     ver.add_argument(
+        "--allowed-signers",
+        type=Path,
+        metavar="FILE",
+        help="also check the signature <manifest>.sig against this OpenSSH allowed-signers "
+        "file; a missing signature is INCONCLUSIVE, a wrong one FAIL",
+    )
+    ver.add_argument(
         "--timeout",
         type=float,
         default=DEFAULT_RERUN_TIMEOUT_SECONDS,
@@ -179,6 +187,18 @@ def _build_parser() -> argparse.ArgumentParser:
     sug.add_argument("--output", action="append", default=[], metavar="PATH")
     sug.add_argument("--timeout", type=float, default=None, metavar="SECONDS")
     sug.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND [ARGS...]")
+
+    sig = sub.add_parser(
+        "sign",
+        help="sign a manifest with an OpenSSH private key (writes <manifest>.sig)",
+        description=(
+            "Sign MANIFEST with the OpenSSH private key in KEY by calling ssh-keygen -Y sign. "
+            "The detached signature is written to MANIFEST.sig. Check it later with "
+            "'sciproof verify MANIFEST --allowed-signers FILE'."
+        ),
+    )
+    sig.add_argument("manifest", type=Path)
+    sig.add_argument("--key", type=Path, required=True, metavar="KEY", help="private key file")
 
     dif = sub.add_parser(
         "diff",
@@ -287,6 +307,16 @@ def _report_format(args: argparse.Namespace) -> str:
     return args.format or ("json" if args.json else "text")
 
 
+def _run_sign(args: argparse.Namespace) -> int:
+    target = sign_manifest(args.manifest, args.key)
+    print(f"Signature written to {target.name}")
+    print(
+        "Note: a signature shows that the holder of the key vouched for this exact manifest. "
+        "Check it with 'sciproof verify MANIFEST --allowed-signers FILE'."
+    )
+    return EXIT_OK
+
+
 def _run_diff(args: argparse.Namespace) -> int:
     output_format = _report_format(args)
     report = diff_manifests(args.old, args.new)
@@ -310,6 +340,7 @@ def _run_verify(args: argparse.Namespace) -> int:
         confirm=_confirm if args.rerun and not args.yes else None,
         clean_env=args.clean_env,
         pass_env=args.pass_env,
+        allowed_signers=args.allowed_signers,
     )
     if output_format == "json":
         print(format_report_json(report))
@@ -344,6 +375,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_verify(args)
         if args.command_name == "diff":
             return _run_diff(args)
+        if args.command_name == "sign":
+            return _run_sign(args)
         if args.command_name == "suggest-inputs":
             return _run_suggest(args)
         print(inspect_file(args.manifest))

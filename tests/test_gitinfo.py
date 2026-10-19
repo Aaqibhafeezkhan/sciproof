@@ -74,3 +74,8 @@ def test_unreadable_status_is_reported_as_dirty():
 def test_a_rename_is_checked_with_both_paths():
     assert _is_dirty(f"R  new.txt{NUL}old.txt{NUL}") is True
     assert _is_dirty(f"R  new.sciproof.json{NUL}old.sciproof.json{NUL}") is False
+
+
+def test_a_detached_signature_of_a_manifest_is_not_a_code_change():
+    assert _is_dirty(f"?? a.sciproof.json.sig{NUL}") is False
+    assert _is_dirty(f"?? a.sciproof.json.sig{NUL}?? other.txt{NUL}") is True

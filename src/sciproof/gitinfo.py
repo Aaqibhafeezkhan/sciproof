@@ -28,7 +28,8 @@ def _is_sciproof_artifact(path: str) -> bool:
     """Files SciProof itself writes next to the experiment never count as code changes."""
     parts = path.replace("\\", "/").split("/")
     return any(
-        part.endswith((".sciproof.json", ".sciproof.d")) or part.startswith(".sciproof-rerun-")
+        part.endswith((".sciproof.json", ".sciproof.json.sig", ".sciproof.d"))
+        or part.startswith(".sciproof-rerun-")
         for part in parts
     )
 

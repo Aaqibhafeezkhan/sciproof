@@ -43,6 +43,7 @@ from sciproof.runner import (
     CommandTimeout,
     run_command,
 )
+from sciproof.signing import NAMESPACE, check_signature
 from sciproof.textutil import safe_text
 from sciproof.treehash import TreeDiff, TreeError, diff_trees, scan_tree, tree_digest
 
@@ -70,6 +71,11 @@ ALWAYS_NOT_CHECKED = (
     "files that were not declared as inputs or outputs",
     "authenticity: manifests are unsigned, so who produced this evidence is not verified",
 )
+UNSIGNED_ITEM = ALWAYS_NOT_CHECKED[2]
+SIGNED_ITEM = (
+    "whether the experiment was run honestly: a good signature shows only that the holder of an "
+    "allowed key vouched for this manifest"
+)
 
 
 @dataclass
@@ -94,6 +100,8 @@ class Report:
     clean_env: bool = False
     #: Names (never values) of the variables handed to a --clean-env rerun.
     env_passed: list[str] = field(default_factory=list)
+    #: Outcome of the signature check (``--allowed-signers``), or ``None`` if not asked for.
+    signature: dict[str, Any] | None = None
 
     def add(
         self,
@@ -154,6 +162,8 @@ class Report:
     def not_checked(self) -> list[str]:
         """What this verification did *not* establish."""
         items = list(ALWAYS_NOT_CHECKED)
+        if self.signature is not None and self.signature["status"] == "good":
+            items[items.index(UNSIGNED_ITEM)] = SIGNED_ITEM
         if self.rerun_executed:
             items += [
                 "stdout and stderr of the rerun: compared for information only, not in the verdict",
@@ -226,6 +236,25 @@ def _unchanged_message(state: _State, item: dict[str, Any]) -> str:
     if state.directory:
         return f"unchanged ({len(item.get('files') or [])} files, tree SHA-256 matches)"
     return "unchanged (SHA-256 matches)"
+
+
+def _check_signature(manifest_path: Path, allowed_signers: Path, report: Report) -> None:
+    """Add the result of checking ``<manifest>.sig`` (a missing signature is not a pass)."""
+    result = check_signature(manifest_path, allowed_signers)
+    evidence = {
+        "kind": "manifest_signature",
+        "namespace": NAMESPACE,
+        "signature_file": result.signature_file,
+        "principal": result.principal,
+        "key_type": result.key_type,
+        "fingerprint": result.fingerprint,
+    }
+    report.signature = {"status": result.status, **evidence}
+    status = {
+        "good": Status.PASS,
+        "bad": Status.FAIL,
+    }.get(result.status, Status.INCONCLUSIVE)
+    report.add(status, "manifest signature", result.message, evidence)
 
 
 def _resolve(base: Path, relative: str, report: Report, subject: str) -> Path | None:
@@ -676,6 +705,7 @@ def verify(
     confirm: Callable[[str], bool] | None = None,
     clean_env: bool = False,
     pass_env: Sequence[str] = (),
+    allowed_signers: Path | None = None,
 ) -> Report:
     """Verify ``manifest_path``.
 
@@ -694,6 +724,9 @@ def verify(
     manifest = load_manifest(manifest_path)
     base = manifest_path.parent
     report = Report(name=manifest["name"], rerun_requested=rerun)
+
+    if allowed_signers is not None:
+        _check_signature(manifest_path, allowed_signers, report)
 
     inputs_intact = _check_inputs(base, manifest, report)
     snapshots = _check_outputs(base, manifest, report)
@@ -809,6 +842,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
         "rerun_executed": report.rerun_executed,
         "clean_env": report.clean_env,
         "env_passed": list(report.env_passed),
+        "signature": report.signature,
         "checks": [
             {
                 "status": c.status.value,
