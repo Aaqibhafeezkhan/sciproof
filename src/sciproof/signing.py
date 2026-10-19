@@ -60,13 +60,14 @@ def signature_path(manifest_path: Path) -> Path:
     return manifest_path.with_name(manifest_path.name + SIGNATURE_SUFFIX)
 
 
-def sign_manifest(manifest_path: Path, key_path: Path) -> Path:
+def sign_manifest(manifest_path: Path | str, key_path: Path | str) -> Path:
     """Write ``<manifest>.sig`` with the private key in ``key_path``; returns its path.
 
     The manifest is validated first: SciProof does not sign a file it would refuse to read.
     ``ssh-keygen`` asks for the key's passphrase itself if it has one.
     """
-    manifest_path = manifest_path.resolve()
+    manifest_path = Path(manifest_path).resolve()
+    key_path = Path(key_path).expanduser()
     load_manifest(manifest_path)
     executable = ssh_keygen()
     if executable is None:
@@ -121,9 +122,10 @@ def _run(arguments: list[str], data: bytes | None = None) -> subprocess.Complete
     )
 
 
-def check_signature(manifest_path: Path, allowed_signers: Path) -> SignatureResult:
+def check_signature(manifest_path: Path | str, allowed_signers: Path | str) -> SignatureResult:
     """Check ``<manifest>.sig`` against ``allowed_signers``. Nothing is executed but ssh-keygen."""
-    manifest_path = manifest_path.resolve()
+    manifest_path = Path(manifest_path).resolve()
+    allowed_signers = Path(allowed_signers).expanduser()
     signature = signature_path(manifest_path)
     name = signature.name
     if not allowed_signers.is_file():

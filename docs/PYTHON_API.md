@@ -27,7 +27,7 @@ A complete, runnable version is `examples/api_usage.py`.
 
 ## Functions
 
-### `capture_experiment(*, name, argv, base, inputs=None, outputs=None, numeric_outputs=None, rtol=1e-9, atol=0.0, timeout=None, max_log_bytes=..., force=False) -> CaptureResult`
+### `capture_experiment(*, name, argv, base, inputs=None, outputs=None, numeric_outputs=None, rtol=1e-9, atol=0.0, timeout=None, max_log_bytes=..., force=False, claims=None) -> CaptureResult`
 
 Runs `argv` once in `base` (no shell) and writes `<name>.sciproof.json` there. The arguments
 mean what the `sciproof capture` options mean; paths are relative to `base`. A command that exits
@@ -54,6 +54,18 @@ arguments. A verdict of `FAIL` or `INCONCLUSIVE` is **not** an exception: it is 
 Compares two manifests and returns what changed between the two recorded runs (see
 [Comparing two runs](DIFF.md)). `report.identical`, `report.summary`, `report.changes`,
 `report.to_dict()`, `report.to_text()` and `report.to_markdown()`. Executes nothing.
+
+### `sign_manifest(manifest_path, key_path) -> Path`
+
+Signs a manifest with an OpenSSH private key and returns the path of the `.sig` file; raises
+`SignatureError`. `verify_manifest(..., allowed_signers=path)` adds the signature check to the
+report, and `report.signature` holds its outcome ([Signing](SIGNING.md)).
+
+### `list_manifests(directory, *, recursive=False, check=False) -> list[Entry]`
+
+The manifests in a directory, newest first, optionally verified (integrity only);
+`export_in_toto(manifest_path) -> dict` returns the manifest as an in-toto Statement
+([Listing and exporting](LIST_AND_EXPORT.md)).
 
 ### `load_manifest(path) -> dict`
 

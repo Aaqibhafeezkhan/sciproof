@@ -1,6 +1,6 @@
 # Benchmarks
 
-Eight verification situations, run end to end through the SciProof command line in fresh
+Ten verification situations, run end to end through the SciProof command line in fresh
 temporary directories. Reproduce with `python benchmarks/run_benchmarks.py` (add `--json FILE` for
 the raw numbers and `--repeat N` for the overhead table). The script exits with `1` if SciProof
 gives an outcome other than the expected one, so it also works as a smoke test.
@@ -44,8 +44,12 @@ gives an outcome other than the expected one, so it also works as a smoke test.
 | 7c. Manifest hash edited to a wrong value | FAIL | FAIL |
 | 8a. Command fails during capture | FAIL, evidence written | exit 1, evidence written |
 | 8b. Capture exceeds a timeout | error, no evidence | exit 3, no evidence written |
+| 9. Rerun whose command never writes the output, with the old output still on disk | FAIL | FAIL ("the rerun did not produce this file") |
+| 10. A recorded claim (`$.value < 40`) that does not hold for the value 42 | FAIL | FAIL |
 
-All 12 matched the expectation.
+All 14 matched the expectation. Scenario 9 is the one that found a real defect: before the fix, the old
+output stayed in place while the command ran and the rerun was reported as `PASS` (reproduced by hand
+on the previous code; the benchmark itself was added with the fix).
 
 ## Overhead
 

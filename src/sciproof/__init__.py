@@ -20,7 +20,10 @@ from sciproof.errors import (  # noqa: E402
     SciProofError,
     UsageError,
 )
+from sciproof.export import to_in_toto as export_in_toto  # noqa: E402
+from sciproof.ledger import list_manifests  # noqa: E402
 from sciproof.manifest import load_manifest  # noqa: E402
+from sciproof.signing import SignatureError, sign_manifest  # noqa: E402
 from sciproof.verify import Check, Report, Status, report_to_dict  # noqa: E402
 from sciproof.verify import verify as verify_manifest  # noqa: E402
 
@@ -33,12 +36,16 @@ __all__ = [
     "ManifestError",
     "Report",
     "SciProofError",
+    "SignatureError",
     "Status",
     "UsageError",
     "__version__",
     "capture_experiment",
     "diff_manifests",
+    "export_in_toto",
+    "list_manifests",
     "load_manifest",
     "report_to_dict",
+    "sign_manifest",
     "verify_manifest",
 ]

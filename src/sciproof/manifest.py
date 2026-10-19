@@ -14,6 +14,14 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sciproof.claims import (
+    MAX_CLAIMS,
+    OPS,
+    ORDER_OPS,
+    SUPPORTED_SUFFIXES,
+    is_number,
+    location_matches_file,
+)
 from sciproof.errors import ManifestError, UnsafePathError
 from sciproof.jsonstrict import reject_duplicate_keys
 from sciproof.paths import validate_relative_path
@@ -116,6 +124,51 @@ def _check_kind(item: dict[str, Any], where: str, minor: int, present: bool) -> 
     return "directory"
 
 
+def _finite_number(value: Any) -> bool:
+    return is_number(value) and math.isfinite(value)
+
+
+def _check_claims(claims: Any, minor: int, outputs: dict[str, tuple[str, bool]]) -> None:
+    """Validate the optional ``claims`` list (schema 1.1): see ``sciproof.claims``."""
+    if claims is None:
+        return
+    if minor < 1:
+        raise _fail("claims", "claims need schema_version 1.1 or later")
+    if not isinstance(claims, list):
+        raise _fail("claims", f"expected a list, got {type(claims).__name__}")
+    if len(claims) > MAX_CLAIMS:
+        raise _fail("claims", f"more than {MAX_CLAIMS} claims")
+    for index, claim in enumerate(claims):
+        where = f"claims[{index}]"
+        claim = _as_dict(claim, where)
+        output = _rel_path(claim.get("output"), f"{where}.output")
+        kind, present = outputs.get(output, (None, False))
+        if kind != "file" or not present or not output.lower().endswith(SUPPORTED_SUFFIXES):
+            raise _fail(
+                f"{where}.output",
+                f"{output!r} must be a declared .json or .csv output file that was present",
+            )
+        location = claim.get("location")
+        if not isinstance(location, str) or not location_matches_file(location, output):
+            raise _fail(f"{where}.location", f"{location!r} is not a location in {output!r}")
+        op = claim.get("op")
+        if op not in OPS:
+            raise _fail(f"{where}.op", f"expected one of {list(OPS)}, got {op!r}")
+        value = claim.get("value")
+        if op in ORDER_OPS or op == "~=":
+            if not _finite_number(value):
+                raise _fail(f"{where}.value", f"{op} needs a finite number")
+        elif not (value is None or isinstance(value, (bool, str)) or _finite_number(value)) or (
+            isinstance(value, str) and len(value) > 1000
+        ):
+            raise _fail(f"{where}.value", "expected a number, string, boolean or null")
+        if op == "~=":
+            _finite_nonneg(claim.get("rtol"), f"{where}.rtol")
+            _finite_nonneg(claim.get("atol"), f"{where}.atol")
+        elif "rtol" in claim or "atol" in claim:
+            raise _fail(where, "rtol and atol only apply to '~='")
+
+
 def check_nesting(declared: list[tuple[str, str]]) -> None:
     """A declared path must not lie inside another declared directory."""
     directories = [path for path, kind in declared if kind == "directory"]
@@ -214,6 +267,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
     _validate_stream(execution.get("stderr"), "execution.stderr")
 
     seen_outputs: set[str] = set()
+    output_info: dict[str, tuple[str, bool]] = {}
     for index, item in enumerate(_get(manifest, "outputs", list, "manifest")):
         where = f"outputs[{index}]"
         item = _as_dict(item, where)
@@ -243,7 +297,9 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         if kind == "directory" and mode != "exact":
             raise _fail(f"{where}.compare.mode", "a directory can only be compared exactly")
         declared.append((path, kind))
+        output_info[path] = (kind, present)
 
+    _check_claims(manifest.get("claims"), minor, output_info)
     check_nesting(declared)
     return manifest
 

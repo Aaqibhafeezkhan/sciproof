@@ -149,11 +149,16 @@ A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/T
 ```text
 sciproof capture --name NAME [--input P]... [--output P]... [--output-numeric P]...
                  [--rtol X] [--atol Y] [--timeout S] [--max-log-bytes N]
-                 [--force] [--allow-nonzero] -- COMMAND [ARGS...]
+                 [--claim OUTPUT 'LOCATION OP VALUE']... [--force] [--allow-nonzero]
+                 -- COMMAND [ARGS...]
 sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--clean-env]
+                 [--allowed-signers FILE]
                  [--pass-env NAME]... [--timeout S] [--json]
 sciproof inspect MANIFEST
 sciproof diff    OLD NEW [--format text|json|markdown]
+sciproof sign    MANIFEST --key KEY
+sciproof list    [DIR] [-r] [--check] [--format text|json|markdown]
+sciproof export  MANIFEST [-o FILE]
 sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
 ```
 
@@ -186,6 +191,16 @@ sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
   environment and packages, Git state, inputs, outputs (numeric ones with the baseline
   tolerance) and exit code. It executes nothing. Exit status `0` if nothing differs, `1`
   otherwise ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/DIFF.md)).
+* `--claim OUTPUT 'LOCATION OP VALUE'` records a statement about one value in a `.json` or
+  `.csv` output (`'$.accuracy >= 0.9'`, `'$.loss ~= 0.25 atol=0.01'`) that `verify` checks on the
+  recorded output and on every rerun. It shows that the value satisfies the comparison, nothing
+  more ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/CLAIMS.md)).
+* `sign` and `verify --allowed-signers FILE` sign a manifest and check the signature with
+  OpenSSH (`ssh-keygen -Y`); SciProof implements no cryptography and trusts only the file you
+  name ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/SIGNING.md)).
+* `list` shows the manifests in a directory, newest first; `list --check` verifies all of them
+  (integrity only) and exits with the worst result. `export` writes a manifest as an unsigned
+  in-toto Statement ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/LIST_AND_EXPORT.md)).
 * `--clean-env` gives a rerun only a minimal environment (`PATH`, temp directories and the
   numerics-related variables SciProof records) instead of all of yours, so a manifest from
   someone else cannot read your credentials from it. `--pass-env NAME` adds a variable. It

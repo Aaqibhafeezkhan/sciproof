@@ -8,6 +8,18 @@ All notable changes are listed here. The format follows
 
 ### Added
 
+* `sciproof sign MANIFEST --key KEY` and `verify --allowed-signers FILE`: sign a manifest and
+  check the signature with OpenSSH (`ssh-keygen -Y`). SciProof implements no cryptography and
+  trusts only the allowed-signers file you name; a missing signature is `INCONCLUSIVE`, a wrong
+  one `FAIL`. See `docs/SIGNING.md`.
+* Claims: `capture --claim OUTPUT 'LOCATION OP VALUE'` records a mechanically checkable statement
+  about a value in a `.json` or `.csv` output (`'$.accuracy >= 0.9'`, `~=` with `rtol=`/`atol=`);
+  `verify` checks it on the recorded output and on every rerun. Manifest schema 1.1. See
+  `docs/CLAIMS.md`.
+* `sciproof list [DIR] [-r] [--check]`: the manifests in a directory, newest first; with
+  `--check` all of them are verified (integrity only) and the exit status is the worst result.
+* `sciproof export MANIFEST`: the manifest as an unsigned in-toto Statement v1 with a SciProof
+  predicate. See `docs/LIST_AND_EXPORT.md`.
 * `sciproof diff OLD NEW`: what changed between two recorded runs (command, environment and
   packages, Git state, inputs, outputs, exit code), without executing anything. Numeric
   outputs are compared with the baseline tolerance and reported as equivalent or outside it.
@@ -36,7 +48,7 @@ All notable changes are listed here. The format follows
   (`docs/REPORT.md`), baseline audit, product roadmap, benchmark results and an architecture
   decision record. The competitive analysis covers the widely used tools (more than 1,000
   GitHub stars): DVC and MLflow.
-* `benchmarks/run_benchmarks.py`: eight reproducible verification scenarios.
+* `benchmarks/run_benchmarks.py`: ten reproducible verification scenarios.
 * Tests: report schema and aggregation, and one test per numeric comparison rule.
 * `verify --rerun --clean-env` (with `--pass-env NAME`) runs the recorded command with a
   minimal environment instead of a copy of yours; the report lists the passed variable
@@ -65,6 +77,13 @@ All notable changes are listed here. The format follows
 
 ### Fixed
 
+* **A rerun could pass without the command writing its outputs.** The previous outputs stayed in
+  place while the command ran, so a command that wrote nothing (a bug, a wrong path, an early
+  exit) was compared with its own old files and reported as reproduced. The declared outputs
+  are now removed before the rerun (they are backed up and restored afterwards), and an output
+  the command does not write is reported as `FAIL`: "the rerun did not produce this file".
+* `ssh-keygen -Y sign` keeps an existing signature and exits 0 when it cannot ask whether to
+  overwrite it; `sciproof sign` now replaces the old signature (and keeps it if signing fails).
 * The manifests, snapshots and rerun directories that SciProof writes itself no longer make
   the Git working tree count as "dirty" in the next capture or verification.
 * Path names that mean something else on Windows (reserved device names such as `aux.txt`, a

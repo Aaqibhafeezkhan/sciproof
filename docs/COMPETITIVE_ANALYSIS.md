@@ -73,6 +73,10 @@ label in brackets says how sure the entry is.
 | Say what was **not** checked | yes, in every report | not described | not described |
 | Compare two recorded runs: command, packages, Git, inputs, outputs | yes (`sciproof diff`) | `metrics diff` between commits (D) | compare in UI (A) |
 | CI summary output | Markdown, JSON, exit codes | `--md`, `--json` (D) | ? |
+| Checkable claims about output values, judged on every verify and rerun | yes (`--claim`) | not described (D) | ? |
+| Signature check on the recorded evidence | yes (OpenSSH, `--allowed-signers`) | ? | ? |
+| List and batch-verify all recorded runs in a directory | yes (`list --check`) | `dvc status` for a project (A) | UI (A) |
+| Export for other tools | in-toto Statement (unsigned) | ? | ? |
 | Runtime dependencies | none | 42 (V) | ? |
 | Telemetry code or hosted component | none | telemetry dependency present (V); default [U] | optional server (D) |
 
@@ -100,7 +104,14 @@ quality in general.
    command a minimal environment instead of all of yours (`--clean-env`).
 4. **`sciproof diff`**: which of the command, packages, Git state, inputs or outputs changed
    between two recorded runs, without executing anything ([Diff](DIFF.md)).
-5. **No runtime dependencies, no account, no server, no telemetry.**
+5. **Claims**: statements such as "accuracy is at least 0.9" that are recorded with the run and
+   judged against the recorded output and every rerun, with the limits of what a holding claim
+   shows stated in the report ([Claims](CLAIMS.md)).
+6. **A rerun that old files cannot satisfy**: the declared outputs are removed (and restored
+   afterwards) before the command runs, so a command that never writes its output is reported
+   as `FAIL` instead of being compared with its own previous result.
+7. **A signature check that trusts only the file you name** ([Signing](SIGNING.md)).
+8. **No runtime dependencies, no account, no server, no telemetry.**
 
 ## Honest overlap assessment
 

@@ -25,6 +25,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from sciproof.claims import MISSING, claim_text, evaluate, json_safe
 from sciproof.environment import (
     clean_environment,
     interpreter_info,
@@ -102,6 +103,8 @@ class Report:
     env_passed: list[str] = field(default_factory=list)
     #: Outcome of the signature check (``--allowed-signers``), or ``None`` if not asked for.
     signature: dict[str, Any] | None = None
+    #: True once the manifest's claims have been looked at.
+    claims_checked: bool = False
 
     def add(
         self,
@@ -164,6 +167,11 @@ class Report:
         items = list(ALWAYS_NOT_CHECKED)
         if self.signature is not None and self.signature["status"] == "good":
             items[items.index(UNSIGNED_ITEM)] = SIGNED_ITEM
+        if self.claims_checked:
+            items.append(
+                "whether a claim is the right criterion: a claim that holds shows only that the "
+                "value satisfies the comparison, not that the comparison is meaningful"
+            )
         if self.rerun_executed:
             items += [
                 "stdout and stderr of the rerun: compared for information only, not in the verdict",
@@ -255,6 +263,67 @@ def _check_signature(manifest_path: Path, allowed_signers: Path, report: Report)
         "bad": Status.FAIL,
     }.get(result.status, Status.INCONCLUSIVE)
     report.add(status, "manifest signature", result.message, evidence)
+
+
+def _check_claims(
+    base: Path,
+    manifest: dict[str, Any],
+    report: Report,
+    phase: str,
+    intact: set[str] | None = None,
+) -> None:
+    """Check the manifest's claims on the recorded outputs (``phase="recorded"``) or on the
+    outputs of a rerun (``phase="rerun"``).
+
+    On the recorded files a claim is only judged if the output still has the recorded hash;
+    otherwise it is ``INCONCLUSIVE``, because a claim about a modified file says nothing about
+    the evidence.
+    """
+    claims = manifest.get("claims") or []
+    if not claims:
+        return
+    report.claims_checked = True
+    cache: dict[str, dict[str, object] | str] = {}
+    for claim in claims:
+        output = claim["output"]
+        subject = ("rerun claim " if phase == "rerun" else "claim ") + claim_text(claim)
+        evidence: dict[str, Any] = {
+            "kind": "claim",
+            "phase": phase,
+            "output": output,
+            "location": claim["location"],
+            "op": claim["op"],
+            "value": claim["value"],
+        }
+        if claim["op"] == "~=":
+            evidence["rtol"], evidence["atol"] = claim["rtol"], claim["atol"]
+        if phase == "recorded" and output not in (intact or set()):
+            report.add(
+                Status.INCONCLUSIVE,
+                subject,
+                f"not judged: {output} no longer matches the recorded evidence, so the claim "
+                "says nothing about it",
+                evidence,
+            )
+            continue
+        if output not in cache:
+            try:
+                path = resolve_inside(base, output)
+                if not path.is_file():
+                    cache[output] = "the rerun did not produce this file"
+                else:
+                    cache[output] = dict(load_numeric(path))
+            except (UnsafePathError, NumericFormatError) as exc:
+                cache[output] = f"cannot be read: {exc}"
+        leaves = cache[output]
+        if isinstance(leaves, str):
+            status = Status.INCONCLUSIVE if "did not produce" in leaves else Status.FAIL
+            report.add(status, subject, f"not judged: {output} {leaves}", evidence)
+            continue
+        result = evaluate(claim, leaves)
+        evidence["found"] = None if result.found is MISSING else json_safe(result.found)
+        evidence["present"] = result.found is not MISSING
+        report.add(Status.PASS if result.holds else Status.FAIL, subject, result.message, evidence)
 
 
 def _resolve(base: Path, relative: str, report: Report, subject: str) -> Path | None:
@@ -625,6 +694,16 @@ def _rerun(
                 shutil.copy2(target, backup_root / relative)
                 had_original.add(relative)
 
+        # Start from a clean slate. A stale output left over from the recorded run would
+        # otherwise "reproduce" the result even if the command never wrote it (a bug, a wrong
+        # path, an early exit). The originals are backed up above and restored afterwards.
+        for relative in sorted(had_original):
+            target = resolve_inside(base, relative)
+            if relative in directory_outputs:
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+
         try:
             argv = manifest["command"]["argv"]
             result = (
@@ -646,6 +725,7 @@ def _rerun(
 
         report.rerun_executed = True
         _compare_rerun(base, manifest, snapshots, result, report)
+        _check_claims(base, manifest, report, "rerun")
 
         # A rerun must not damage the evidence it is checked against.
         for item in manifest["inputs"]:
@@ -705,7 +785,7 @@ def verify(
     confirm: Callable[[str], bool] | None = None,
     clean_env: bool = False,
     pass_env: Sequence[str] = (),
-    allowed_signers: Path | None = None,
+    allowed_signers: Path | str | None = None,
 ) -> Report:
     """Verify ``manifest_path``.
 
@@ -726,10 +806,18 @@ def verify(
     report = Report(name=manifest["name"], rerun_requested=rerun)
 
     if allowed_signers is not None:
-        _check_signature(manifest_path, allowed_signers, report)
+        _check_signature(manifest_path, Path(allowed_signers), report)
 
     inputs_intact = _check_inputs(base, manifest, report)
     snapshots = _check_outputs(base, manifest, report)
+    intact = {
+        item["path"]
+        for item in manifest["outputs"]
+        if any(
+            c.subject == f"output {item['path']}" and c.status is Status.PASS for c in report.checks
+        )
+    }
+    _check_claims(base, manifest, report, "recorded", intact)
 
     recorded_git = manifest.get("git")
     if recorded_git and recorded_git["dirty"]:

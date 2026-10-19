@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sciproof import __version__
+from sciproof.claims import claim_text, evaluate, parse_claim
 from sciproof.environment import interpreter_info, platform_info, selected_env_vars
 from sciproof.errors import CaptureError, ManifestError, SciProofError, UnsafePathError
 from sciproof.gitinfo import git_info
@@ -108,6 +109,50 @@ def _refuse_evidence_paths(declared: list[str], name: str) -> None:
             )
 
 
+def _parse_claims(
+    base: Path, claims: list[tuple[str, str]], output_paths: list[str]
+) -> list[dict[str, Any]]:
+    """Turn ``(output, expression)`` pairs into manifest claims on declared outputs."""
+    records: list[dict[str, Any]] = []
+    for output, expression in claims:
+        try:
+            relative = to_manifest_path(base, output)
+        except UnsafePathError as exc:
+            raise CaptureError(str(exc)) from exc
+        if relative not in output_paths:
+            raise CaptureError(
+                f"claim on {output!r}: the file must be declared with --output or --output-numeric"
+            )
+        records.append(parse_claim(relative, expression))
+    return records
+
+
+def _check_claims_at_capture(
+    base: Path, claims: list[dict[str, Any]], outputs: list[dict[str, Any]]
+) -> list[str]:
+    """Evaluate the claims on the outputs just produced; return warnings for those that fail."""
+    present = {o["path"] for o in outputs if o.get("present") and o.get("kind", "file") == "file"}
+    warnings: list[str] = []
+    cache: dict[str, dict[str, object]] = {}
+    for claim in claims:
+        output = claim["output"]
+        if output not in present:
+            raise CaptureError(f"claim on {output!r}: the output file does not exist")
+        if output not in cache:
+            try:
+                cache[output] = dict(load_numeric(base / output))
+            except NumericFormatError as exc:
+                raise CaptureError(f"claim on {output!r}: {exc}") from exc
+        result = evaluate(claim, cache[output])
+        if not result.holds:
+            detail = result.message.removeprefix("does not hold: ")
+            warnings.append(
+                f"a claim does not hold at capture time ({claim_text(claim)}): {detail}. "
+                "It is recorded anyway, and verification will report it."
+            )
+    return warnings
+
+
 def _unique(items: list[str], what: str) -> None:
     if len(set(items)) != len(items):
         raise CaptureError(f"{what} contains the same path more than once")
@@ -126,6 +171,7 @@ def capture(
     timeout: float | None = None,
     max_log_bytes: int = DEFAULT_MAX_LOG_BYTES,
     force: bool = False,
+    claims: list[tuple[str, str]] | None = None,
 ) -> CaptureResult:
     """Run ``argv`` once in ``base`` and write ``<name>.sciproof.json`` there.
 
@@ -156,6 +202,7 @@ def capture(
     _unique(input_paths, "--input")
     _unique(exact_paths + numeric_paths, "--output/--output-numeric")
     _refuse_evidence_paths(input_paths + exact_paths + numeric_paths, name)
+    claim_records = _parse_claims(base, claims or [], exact_paths + numeric_paths)
     overlap = set(input_paths) & set(exact_paths + numeric_paths)
     if overlap:
         raise CaptureError(f"a file cannot be both input and output: {sorted(overlap)[0]}")
@@ -292,9 +339,12 @@ def capture(
         except ManifestError as exc:
             raise CaptureError(str(exc).removeprefix("invalid manifest: manifest: ")) from exc
         has_directory = any(kind == "directory" for _, kind in declared)
+        warnings.extend(_check_claims_at_capture(base, claim_records, output_records))
         manifest: dict[str, Any] = {
             "schema": SCHEMA,
-            "schema_version": SCHEMA_VERSION_DIRECTORIES if has_directory else SCHEMA_VERSION,
+            "schema_version": (
+                SCHEMA_VERSION_DIRECTORIES if has_directory or claim_records else SCHEMA_VERSION
+            ),
             "name": name,
             "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "tool": {"name": "sciproof", "version": __version__},
@@ -323,6 +373,8 @@ def capture(
             },
             "outputs": output_records,
         }
+        if claim_records:
+            manifest["claims"] = claim_records
         try:
             write_manifest(manifest_path, manifest)
         except OSError as exc:

@@ -18,7 +18,15 @@ from sciproof import __version__
 from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, capture
 from sciproof.diffmanifests import diff_manifests, format_diff_json
 from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
+from sciproof.export import format_in_toto
 from sciproof.inspect_manifest import inspect_file
+from sciproof.ledger import (
+    format_json,
+    format_markdown,
+    format_text,
+    list_manifests,
+    worst_verdict,
+)
 from sciproof.signing import sign_manifest
 from sciproof.suggest import suggest_inputs
 from sciproof.textutil import safe_text
@@ -104,6 +112,16 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_MAX_LOG_BYTES,
         help="keep at most this many bytes of stdout and of stderr in the manifest",
+    )
+    cap.add_argument(
+        "--claim",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("OUTPUT", "EXPRESSION"),
+        help="record a checkable claim about a value in a declared .json/.csv output, for example "
+        "--claim out/metrics.json '$.accuracy >= 0.9' (operators: == != < <= > >= and "
+        "'~=' with rtol=/atol=); verify checks it; repeatable",
     )
     cap.add_argument("--force", action="store_true", help="overwrite an existing manifest")
     cap.add_argument(
@@ -214,6 +232,35 @@ def _build_parser() -> argparse.ArgumentParser:
     dif.add_argument("--json", action="store_true", help="same as --format json")
     dif.add_argument("--format", choices=("text", "json", "markdown"), default=None)
 
+    lst = sub.add_parser(
+        "list",
+        help="list the manifests in a directory; with --check, verify all of them (no rerun)",
+        description=(
+            "List the *.sciproof.json files in DIRECTORY (default: the current directory), newest "
+            "first. With --check each one is verified for integrity (nothing is executed) and the "
+            "exit status is 0 if all PASS, 1 if any FAIL or is invalid, 2 if any is INCONCLUSIVE."
+        ),
+    )
+    lst.add_argument("directory", nargs="?", type=Path, default=Path("."))
+    lst.add_argument("-r", "--recursive", action="store_true", help="also look in subdirectories")
+    lst.add_argument("--check", action="store_true", help="verify every manifest (integrity only)")
+    lst.add_argument("--json", action="store_true", help="same as --format json")
+    lst.add_argument("--format", choices=("text", "json", "markdown"), default=None)
+
+    exp = sub.add_parser(
+        "export",
+        help="write a manifest in another format (in-toto Statement v1) for other tools",
+        description=(
+            "Write MANIFEST as an in-toto Statement v1 with a SciProof predicate. The Statement is "
+            "not signed and is not an attestation by itself; wrap it with your own tooling."
+        ),
+    )
+    exp.add_argument("manifest", type=Path)
+    exp.add_argument("--format", choices=("in-toto",), default="in-toto")
+    exp.add_argument(
+        "-o", "--output", type=Path, metavar="FILE", help="write here (default: stdout)"
+    )
+
     ins = sub.add_parser("inspect", help="show a readable summary; never executes anything")
     ins.add_argument("manifest", type=Path)
     return parser
@@ -250,6 +297,7 @@ def _run_capture(args: argparse.Namespace) -> int:
         timeout=args.timeout,
         max_log_bytes=args.max_log_bytes,
         force=args.force,
+        claims=[(output, expression) for output, expression in args.claim],
     )
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
@@ -305,6 +353,28 @@ def _report_format(args: argparse.Namespace) -> str:
     if args.json and args.format not in (None, "json"):
         raise UsageError(f"--json conflicts with --format {args.format}")
     return args.format or ("json" if args.json else "text")
+
+
+def _run_list(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)
+    entries = list_manifests(args.directory, recursive=args.recursive, check=args.check)
+    printer = {"json": format_json, "markdown": format_markdown}.get(output_format, format_text)
+    print(printer(entries, args.check))
+    if not args.check:
+        return EXIT_OK
+    return {"PASS": EXIT_OK, "FAIL": EXIT_FAIL, "INCONCLUSIVE": EXIT_INCONCLUSIVE}.get(
+        worst_verdict(entries) or "PASS", EXIT_OK
+    )
+
+
+def _run_export(args: argparse.Namespace) -> int:
+    text = format_in_toto(args.manifest)
+    if args.output is None:
+        print(text, end="")
+        return EXIT_OK
+    args.output.write_text(text, encoding="utf-8", newline="\n")
+    print(f"Wrote {args.output}")
+    return EXIT_OK
 
 
 def _run_sign(args: argparse.Namespace) -> int:
@@ -375,6 +445,10 @@ def main(argv: list[str] | None = None) -> int:
             return _run_verify(args)
         if args.command_name == "diff":
             return _run_diff(args)
+        if args.command_name == "list":
+            return _run_list(args)
+        if args.command_name == "export":
+            return _run_export(args)
         if args.command_name == "sign":
             return _run_sign(args)
         if args.command_name == "suggest-inputs":

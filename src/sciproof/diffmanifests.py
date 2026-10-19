@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sciproof.claims import claim_text
 from sciproof.errors import UnsafePathError
 from sciproof.hashing import sha256_file
 from sciproof.manifest import load_manifest
@@ -26,7 +27,7 @@ from sciproof.treehash import diff_trees
 
 DIFF_SCHEMA = "sciproof.diff"
 DIFF_SCHEMA_VERSION = "1.0"
-SECTIONS = ("command", "environment", "git", "inputs", "outputs", "execution")
+SECTIONS = ("command", "environment", "git", "inputs", "outputs", "claims", "execution")
 SYMBOL = {"added": "+", "removed": "-", "changed": "~"}
 MAX_LINES_PER_SECTION = 20
 
@@ -381,6 +382,16 @@ def _diff_artifacts(
             report.add(section, "changed", path, "; ".join(parts), evidence)
 
 
+def _diff_claims(old: dict[str, Any], new: dict[str, Any], report: DiffReport) -> None:
+    """Claims are identified by what they say; a changed number is a removed and an added claim."""
+    a = {claim_text(c): c for c in old.get("claims") or []}
+    b = {claim_text(c): c for c in new.get("claims") or []}
+    for text in sorted(set(a) - set(b)):
+        report.add("claims", "removed", text, "in the old manifest only")
+    for text in sorted(set(b) - set(a)):
+        report.add("claims", "added", text, "in the new manifest only")
+
+
 def _diff_execution(old: dict[str, Any], new: dict[str, Any], report: DiffReport) -> None:
     a, b = old["execution"], new["execution"]
     if a["exit_code"] != b["exit_code"]:
@@ -402,6 +413,7 @@ def diff_manifests(old_path: Path | str, new_path: Path | str) -> DiffReport:
     _diff_git(old, new, report)
     _diff_artifacts("inputs", old, new, old_file.parent, new_file.parent, report)
     _diff_artifacts("outputs", old, new, old_file.parent, new_file.parent, report)
+    _diff_claims(old, new, report)
     _diff_execution(old, new, report)
     return report
 

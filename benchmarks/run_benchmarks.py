@@ -1,4 +1,4 @@
-"""Reproducible benchmark: eight verification scenarios, run end to end through the CLIs.
+"""Reproducible benchmark: ten verification scenarios, run end to end through the CLIs.
 
 Usage (from the repository root, with SciProof installed):
 
@@ -243,6 +243,44 @@ def sciproof_scenarios(tool: SciProof) -> list[Outcome]:
         seconds,
         "no evidence written: " + str(not (root / "t.sciproof.json").exists()),
     )
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 9. a rerun whose command never writes the output (a stale file must not pass for it)
+    root = fresh_project()
+    tool.capture(root)
+    manifest = root / "exp.sciproof.json"
+    data = json.loads(manifest.read_text())
+    data["command"]["argv"] = [sys.executable, "-c", "pass"]
+    manifest.write_text(json.dumps(data, indent=2))
+    verdict, code, seconds, _ = tool.verify(root, rerun=True)
+    add("9 rerun that writes nothing (stale output present)", "FAIL", verdict, code, seconds)
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 10. a claim that does not hold in the recorded output
+    root = fresh_project()
+    code, seconds, _ = run(
+        [
+            *tool.cmd,
+            "capture",
+            "--name",
+            "exp",
+            "--input",
+            "data.json",
+            "--input",
+            "experiment.py",
+            "--output-numeric",
+            "result.json",
+            "--claim",
+            "result.json",
+            "$.value < 40",
+            "--",
+            sys.executable,
+            "experiment.py",
+        ],
+        root,
+    )
+    verdict, code, seconds, _ = tool.verify(root)
+    add("10 claim '$.value < 40' with value 42", "FAIL", verdict, code, seconds)
     shutil.rmtree(root, ignore_errors=True)
     return results
 

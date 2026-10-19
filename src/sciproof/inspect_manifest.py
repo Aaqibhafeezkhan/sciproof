@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sciproof.claims import claim_text
 from sciproof.manifest import load_manifest
 from sciproof.textutil import safe_text
 
@@ -92,6 +93,11 @@ def describe(manifest: dict[str, Any]) -> str:
             lines.append(f"  {safe_text(item['path'])}  (absent when captured)  compare: {how}")
     if not manifest["outputs"]:
         lines.append("  (none)")
+
+    claims = manifest.get("claims") or []
+    if claims:
+        lines += ["", f"Claims ({len(claims)}), checked by verify:"]
+        lines += [f"  {safe_text(claim_text(c), 300)}" for c in claims]
 
     lines += [
         "",
