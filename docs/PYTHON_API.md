@@ -49,6 +49,12 @@ meaningful with `rerun`.
 Raises `ManifestError` for an unreadable, invalid or unsafe manifest and `UsageError` for invalid
 arguments. A verdict of `FAIL` or `INCONCLUSIVE` is **not** an exception: it is `report.status`.
 
+### `diff_manifests(old_path, new_path) -> DiffReport`
+
+Compares two manifests and returns what changed between the two recorded runs (see
+[Comparing two runs](DIFF.md)). `report.identical`, `report.summary`, `report.changes`,
+`report.to_dict()`, `report.to_text()` and `report.to_markdown()`. Executes nothing.
+
 ### `load_manifest(path) -> dict`
 
 Reads and strictly validates a manifest (repeated keys, unsafe paths and bad hashes raise
@@ -57,7 +63,7 @@ Reads and strictly validates a manifest (repeated keys, unsafe paths and bad has
 ### `report_to_dict(report) -> dict` and `Report.to_dict()`
 
 The report as plain data in the `sciproof.report` schema, identical to `sciproof verify --json`
-([Report](REPORT.md)).
+([Report](REPORT.md)). `Report.to_markdown()` returns it as GitHub-flavoured Markdown.
 
 ## Types
 

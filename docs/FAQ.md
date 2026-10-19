@@ -52,7 +52,7 @@ see the limits listed in [Concepts](CONCEPTS.md).
 
 No. A tested recipe using `ssh-keygen -Y` is described in [Signing manifests](DESIGN_SIGNING.md).
 
-## How is it different from DVC, ReproZip, Sumatra, MLflow or RO-Crate?
+## How is it different from DVC or MLflow?
 
 See the [comparison](COMPETITIVE_ANALYSIS.md). In short: if you already use DVC you largely have
 integrity checking; SciProof's focus is the verification step with an explicit verdict and

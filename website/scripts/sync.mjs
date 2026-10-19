@@ -55,6 +55,7 @@ const PAGES = [
   { slug: 'manifest', title: 'Manifest format', source: 'docs/MANIFEST.md', description: 'The evidence manifest, field by field.' },
   { slug: 'exit-codes', title: 'Exit codes', source: 'docs/EXIT_CODES.md', description: 'Exit codes and verdicts of every command.' },
   { slug: 'python-api', title: 'Python API', source: 'docs/PYTHON_API.md', description: 'Capture and verify from Python: functions, types and stability.' },
+  { slug: 'diff', title: 'Comparing two runs', source: 'docs/DIFF.md', description: 'sciproof diff: what changed between two recorded runs.' },
   { slug: 'report', title: 'Verification report', source: 'docs/REPORT.md', description: 'What a report contains, how verdicts are combined and the JSON report schema.' },
   { slug: 'numeric-comparison', title: 'Numeric comparison rules', source: 'docs/COMPARISON.md', description: 'The exact rules of the tolerance comparison for JSON, CSV and .npy outputs.' },
   { slug: 'ci', title: 'Using SciProof in CI', source: 'docs/CI.md', description: 'Verify evidence in a GitHub Actions job.' },
@@ -63,7 +64,7 @@ const PAGES = [
   { slug: 'ro-crate', title: 'RO-Crate design notes', source: 'docs/DESIGN_RO_CRATE.md', description: 'Mapping a manifest to the Process Run Crate profile.' },
   { slug: 'benchmarks', title: 'Benchmarks', source: 'docs/BENCHMARKS.md', description: 'Eight verification scenarios, measured, with a like-for-like comparison where one exists.' },
   { slug: 'product-roadmap', title: 'Product roadmap', source: 'docs/PRODUCT_ROADMAP.md', description: 'Personas, priorities, exclusions and a validation plan.' },
-  { slug: 'comparison', title: 'Comparison with other tools', source: 'docs/COMPETITIVE_ANALYSIS.md', description: 'How SciProof overlaps with DVC, ReproZip, Sumatra, MLflow and RO-Crate.' },
+  { slug: 'comparison', title: 'Comparison with other tools', source: 'docs/COMPETITIVE_ANALYSIS.md', description: 'How SciProof compares with DVC and MLflow, the most widely used tools in the area.' },
   {
     slug: 'roadmap',
     title: 'Roadmap',

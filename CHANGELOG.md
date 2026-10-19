@@ -8,6 +8,16 @@ All notable changes are listed here. The format follows
 
 ### Added
 
+* `sciproof diff OLD NEW`: what changed between two recorded runs (command, environment and
+  packages, Git state, inputs, outputs, exit code), without executing anything. Numeric
+  outputs are compared with the baseline tolerance and reported as equivalent or outside it.
+  Text, JSON (`sciproof.diff` 1.0) and Markdown formats; `sciproof.diff_manifests()` in
+  Python. See `docs/DIFF.md`.
+* `verify --format markdown` (and `Report.to_markdown()`): the report as GitHub-flavoured
+  Markdown for CI summaries, with a table of numeric differences. `--json` keeps working as
+  an alias of `--format json`.
+* The JSON report's numeric evidence has `difference_details`: per difference the location,
+  recorded and found value, absolute and relative difference and the allowed difference.
 * `sciproof suggest-inputs -- COMMAND`: runs a Python command once and lists the files it read
   that are not declared. It exits with `2` (inconclusive) when its audit hook never started
   (the command is not Python, or Python ran with `-I`/`-S`), instead of claiming that nothing
@@ -24,8 +34,8 @@ All notable changes are listed here. The format follows
 * CSV differences name the column: `r2c1 (column 'loss'): recorded 0.4, found 0.9`.
 * Documentation: exact numeric comparison rules (`docs/COMPARISON.md`), the report format
   (`docs/REPORT.md`), baseline audit, product roadmap, benchmark results and an architecture
-  decision record. The competitive analysis was extended with ReproLedger, VeriRepro, noWorkflow
-  and verified facts for DVC, ReproZip and MLflow.
+  decision record. The competitive analysis covers the widely used tools (more than 1,000
+  GitHub stars): DVC and MLflow.
 * `benchmarks/run_benchmarks.py`: eight reproducible verification scenarios.
 * Tests: report schema and aggregation, and one test per numeric comparison rule.
 * `verify --rerun --clean-env` (with `--pass-env NAME`) runs the recorded command with a

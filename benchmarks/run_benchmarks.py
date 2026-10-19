@@ -2,19 +2,15 @@
 
 Usage (from the repository root, with SciProof installed):
 
-    python benchmarks/run_benchmarks.py                     # SciProof only
-    python benchmarks/run_benchmarks.py --reproledger PATH  # also ReproLedger, see below
+    python benchmarks/run_benchmarks.py
+    python benchmarks/run_benchmarks.py --json results.json --repeat 7
 
 Every scenario starts in a fresh temporary directory with the same tiny deterministic
-experiment (``data.json`` -> ``result.json``), so tools are compared on equivalent tasks and
-nothing outside that directory is touched. The script prints a Markdown table and, with
-``--json FILE``, writes the raw measurements.
+experiment (``data.json`` -> ``result.json``), so nothing outside that directory is touched. The
+script prints a Markdown table and, with ``--json FILE``, writes the raw measurements. It exits
+with 1 if SciProof gives an outcome other than the expected one.
 
-``--reproledger PATH`` takes the path to a ``reproledger`` executable that you installed
-yourself (for example ``pip install`` of https://github.com/Alqudimi/reproledger in a separate
-virtual environment). It is never installed or downloaded by this script.
-
-What is measured: the verdict / exit code each tool gives (accuracy against the expected
+What is measured: the verdict / exit code SciProof gives (accuracy against the expected
 outcome) and wall-clock time (median of ``--repeat`` runs). What is not measured: memory,
 large inputs, other platforms. Timings are for a ~0.1 s experiment on one machine and show
 process start-up overhead, not scalability.
@@ -23,7 +19,6 @@ process start-up overhead, not scalability.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 import shutil
@@ -127,46 +122,6 @@ class SciProof:
             argv += ["--rerun", "--yes"]
         code, seconds, text = run(argv, root, env)
         return SCIPROOF_VERDICTS.get(code, f"exit {code}"), code, seconds, text
-
-
-# ------------------------------------------------------------------------------------------
-# ReproLedger adapter (only integrity and exit status are comparable; see the docs)
-# ------------------------------------------------------------------------------------------
-
-
-class ReproLedger:
-    name = "reproledger"
-
-    def __init__(self, executable: str) -> None:
-        self.cmd = [executable]
-
-    def capture(self, root: Path) -> tuple[int, str]:
-        run([*self.cmd, "init"], root)
-        code, _, text = run(
-            [
-                *self.cmd,
-                "run",
-                "--input",
-                "data.json",
-                "--input",
-                "experiment.py",
-                "--output",
-                "result.json",
-                "--",
-                sys.executable,
-                "experiment.py",
-            ],
-            root,
-        )
-        run_id = ""
-        with contextlib.suppress(ValueError, KeyError):
-            run_id = json.loads(text)["run_id"]
-        return code, run_id
-
-    def verify(self, root: Path, run_id: str):
-        code, seconds, text = run([*self.cmd, "verify", run_id], root)
-        verdict = {0: "PASS", 4: "FAIL", 3: "ERROR", 5: "ERROR"}.get(code, f"exit {code}")
-        return verdict, code, seconds, text
 
 
 # ------------------------------------------------------------------------------------------
@@ -292,81 +247,6 @@ def sciproof_scenarios(tool: SciProof) -> list[Outcome]:
     return results
 
 
-def reproledger_scenarios(tool: ReproLedger) -> list[Outcome]:
-    results: list[Outcome] = []
-
-    def add(name, expected, verdict, code, seconds, note=""):
-        results.append(Outcome(name, tool.name, expected, verdict, code, seconds, note))
-
-    def unsupported(name, expected, why):
-        results.append(Outcome(name, tool.name, expected, "unsupported", None, 0.0, why))
-
-    root = fresh_project()
-    _, run_id = tool.capture(root)
-    add("1 unchanged experiment", "PASS", *tool.verify(root, run_id)[:3])
-    unsupported("1b unchanged, rerun", "PASS", "no rerun: 'replay' only prints a plan")
-    shutil.rmtree(root, ignore_errors=True)
-
-    root = fresh_project()
-    _, run_id = tool.capture(root)
-    (root / "data.json").write_text('{"x": 22}')
-    add("2 modified input", "FAIL", *tool.verify(root, run_id)[:3])
-    shutil.rmtree(root, ignore_errors=True)
-
-    root = fresh_project()
-    _, run_id = tool.capture(root)
-    (root / "result.json").write_text('{"value": 999, "label": "ok"}')
-    add("3 modified output", "FAIL", *tool.verify(root, run_id)[:3])
-    shutil.rmtree(root, ignore_errors=True)
-
-    unsupported("4 within tolerance", "PASS", "no numeric tolerance comparison and no rerun")
-    unsupported("5 outside", "FAIL", "no numeric tolerance comparison and no rerun")
-
-    root = fresh_project()
-    _, run_id = tool.capture(root)
-    (root / "data.json").unlink()
-    verdict, code, seconds, text = tool.verify(root, run_id)
-    add(
-        "6 missing required input",
-        "INCONCLUSIVE",
-        verdict,
-        code,
-        seconds,
-        "only PASS/FAIL exist: a missing file is reported as a failed check",
-    )
-    shutil.rmtree(root, ignore_errors=True)
-
-    root = fresh_project()
-    _, run_id = tool.capture(root)
-    manifest = root / ".reproledger" / "runs" / run_id / "manifest.json"
-    original = manifest.read_text()
-    manifest.write_text(original[: len(original) // 2])
-    add("7a truncated manifest", "ERROR", *tool.verify(root, run_id)[:3])
-    manifest.write_text(original.replace('"exit_code": 0', '"exit_code": 1', 1))
-    add("7c manifest edited (sidecar digest not updated)", "FAIL", *tool.verify(root, run_id)[:3])
-    shutil.rmtree(root, ignore_errors=True)
-
-    root = fresh_project()
-    (root / "fail.py").write_text("import sys; sys.exit(3)")
-    run([*tool.cmd, "init"], root)
-    code, seconds, text = run(
-        [*tool.cmd, "run", "--input", "data.json", "--", sys.executable, "fail.py"], root
-    )
-    recorded = '"status": "failed"' in text
-    verdict = "FAIL" if code == 3 and recorded else f"exit {code}"
-    add(
-        "8a command fails at capture",
-        "FAIL",
-        verdict,
-        code,
-        seconds,
-        f"evidence is still written: {recorded}",
-    )
-    unsupported("8b capture timeout", "ERROR", "the run command has no timeout option")
-    shutil.rmtree(root, ignore_errors=True)
-    return results
-
-
 def table(outcomes: list[Outcome]) -> str:
     lines = [
         "| Scenario | Tool | Expected | Observed | Exit | Seconds | Note |",
@@ -405,24 +285,18 @@ def overhead(tool: SciProof, repeat: int) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--reproledger", metavar="PATH", help="path to a reproledger executable")
     parser.add_argument("--repeat", type=int, default=5, help="repetitions for the overhead table")
     parser.add_argument("--json", metavar="FILE", help="write raw measurements here")
     args = parser.parse_args()
 
     outcomes = sciproof_scenarios(SciProof())
-    if args.reproledger:
-        outcomes += reproledger_scenarios(ReproLedger(args.reproledger))
     print(table(outcomes))
     print()
     print("\n".join(overhead(SciProof(), args.repeat)))
     if args.json:
         Path(args.json).write_text(json.dumps([asdict(o) for o in outcomes], indent=2))
-    # Only SciProof's own outcomes can fail this script. A different design in another tool
-    # (for example two verdicts instead of three) is shown in the table, not treated as an error.
-    wrong = [o for o in outcomes if o.correct is False and o.tool == "sciproof"]
-    other = [o for o in outcomes if o.correct is False and o.tool != "sciproof"]
-    print(f"\n{len(wrong)} unexpected SciProof outcome(s); {len(other)} other-tool difference(s)")
+    wrong = [o for o in outcomes if o.correct is False]
+    print(f"\n{len(wrong)} unexpected outcome(s)")
     return 1 if wrong else 0
 
 

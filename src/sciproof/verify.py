@@ -35,7 +35,7 @@ from sciproof.errors import ConfirmationRequired, UnsafePathError, UsageError
 from sciproof.gitinfo import git_info
 from sciproof.hashing import sha256_bytes, sha256_file
 from sciproof.manifest import load_manifest
-from sciproof.numeric import NumericFormatError, compare, load_numeric
+from sciproof.numeric import NumericFormatError, compare_detailed, load_numeric
 from sciproof.paths import resolve_inside
 from sciproof.runner import (
     CommandInterrupted,
@@ -112,6 +112,12 @@ class Report:
         if Status.INCONCLUSIVE in statuses or not statuses:
             return Status.INCONCLUSIVE
         return Status.PASS
+
+    def to_markdown(self) -> str:
+        """The report as GitHub-flavoured Markdown (a CI summary or a pull-request comment)."""
+        from sciproof.markdown import report_markdown
+
+        return report_markdown(self)
 
     def to_dict(self) -> dict[str, Any]:
         """The report as plain data, in the ``sciproof.report`` JSON schema (docs/REPORT.md)."""
@@ -508,7 +514,7 @@ def _compare_rerun(
             "rule": NUMERIC_RULE,
         }
         try:
-            differences = compare(load_numeric(snapshot), load_numeric(path), rtol, atol)
+            details = compare_detailed(load_numeric(snapshot), load_numeric(path), rtol, atol)
         except NumericFormatError as exc:
             report.add(
                 Status.FAIL,
@@ -517,7 +523,9 @@ def _compare_rerun(
                 {**numeric_evidence, "differences": None, "error": str(exc)},
             )
             continue
+        differences = [d.message for d in details]
         numeric_evidence["differences"] = differences
+        numeric_evidence["difference_details"] = [d.to_dict() for d in details]
         if differences:
             report.add(
                 Status.FAIL,

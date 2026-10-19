@@ -12,6 +12,7 @@ __version__ = "0.1.1"
 # The imports follow ``__version__`` on purpose: ``capture`` reads it while it is being imported.
 from sciproof.capture import CaptureResult  # noqa: E402
 from sciproof.capture import capture as capture_experiment  # noqa: E402
+from sciproof.diffmanifests import DiffReport, diff_manifests  # noqa: E402
 from sciproof.errors import (  # noqa: E402
     CaptureError,
     ConfirmationRequired,
@@ -28,6 +29,7 @@ __all__ = [
     "CaptureResult",
     "Check",
     "ConfirmationRequired",
+    "DiffReport",
     "ManifestError",
     "Report",
     "SciProofError",
@@ -35,6 +37,7 @@ __all__ = [
     "UsageError",
     "__version__",
     "capture_experiment",
+    "diff_manifests",
     "load_manifest",
     "report_to_dict",
     "verify_manifest",

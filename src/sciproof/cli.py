@@ -16,7 +16,8 @@ from pathlib import Path
 
 from sciproof import __version__
 from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, capture
-from sciproof.errors import ConfirmationRequired, SciProofError
+from sciproof.diffmanifests import diff_manifests, format_diff_json
+from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
 from sciproof.inspect_manifest import inspect_file
 from sciproof.suggest import suggest_inputs
 from sciproof.textutil import safe_text
@@ -156,7 +157,14 @@ def _build_parser() -> argparse.ArgumentParser:
     ver.add_argument(
         "--json",
         action="store_true",
-        help="print the report as one JSON object (exit codes are unchanged)",
+        help="print the report as one JSON object (same as --format json)",
+    )
+    ver.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default=None,
+        help="report format: text (default), json, or markdown for CI summaries "
+        "(for example: >> $GITHUB_STEP_SUMMARY); exit codes are the same for all",
     )
 
     sug = sub.add_parser(
@@ -171,6 +179,20 @@ def _build_parser() -> argparse.ArgumentParser:
     sug.add_argument("--output", action="append", default=[], metavar="PATH")
     sug.add_argument("--timeout", type=float, default=None, metavar="SECONDS")
     sug.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND [ARGS...]")
+
+    dif = sub.add_parser(
+        "diff",
+        help="compare two manifests: what changed between two recorded runs? (executes nothing)",
+        description=(
+            "Compare OLD and NEW manifests: command, environment (Python, platform, packages), "
+            "Git state, inputs, outputs (numeric outputs with the OLD tolerance) and exit code. "
+            "Exit status 0 if there is no difference, 1 if there is. Nothing is executed."
+        ),
+    )
+    dif.add_argument("old", type=Path, help="the baseline manifest")
+    dif.add_argument("new", type=Path, help="the manifest to compare with it")
+    dif.add_argument("--json", action="store_true", help="same as --format json")
+    dif.add_argument("--format", choices=("text", "json", "markdown"), default=None)
 
     ins = sub.add_parser("inspect", help="show a readable summary; never executes anything")
     ins.add_argument("manifest", type=Path)
@@ -258,7 +280,27 @@ def _run_suggest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _report_format(args: argparse.Namespace) -> str:
+    """``--json`` is an alias of ``--format json``; asking for two different formats is an error."""
+    if args.json and args.format not in (None, "json"):
+        raise UsageError(f"--json conflicts with --format {args.format}")
+    return args.format or ("json" if args.json else "text")
+
+
+def _run_diff(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)
+    report = diff_manifests(args.old, args.new)
+    if output_format == "json":
+        print(format_diff_json(report))
+    elif output_format == "markdown":
+        print(report.to_markdown())
+    else:
+        print(report.to_text())
+    return EXIT_OK if report.identical else EXIT_FAIL
+
+
 def _run_verify(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)  # before anything runs
     report = verify(
         args.manifest,
         rerun=args.rerun,
@@ -269,7 +311,12 @@ def _run_verify(args: argparse.Namespace) -> int:
         clean_env=args.clean_env,
         pass_env=args.pass_env,
     )
-    print(format_report_json(report) if args.json else format_report(report))
+    if output_format == "json":
+        print(format_report_json(report))
+    elif output_format == "markdown":
+        print(report.to_markdown())
+    else:
+        print(format_report(report))
     return _STATUS_EXIT[report.status]
 
 
@@ -295,6 +342,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_capture(args)
         if args.command_name == "verify":
             return _run_verify(args)
+        if args.command_name == "diff":
+            return _run_diff(args)
         if args.command_name == "suggest-inputs":
             return _run_suggest(args)
         print(inspect_file(args.manifest))
