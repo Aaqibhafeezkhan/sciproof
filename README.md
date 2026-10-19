@@ -172,8 +172,10 @@ sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
 * `suggest-inputs` runs a Python command once (it really runs, with side effects) and lists files it
   opened for reading that are not declared, so you can add them as `--input`. It only sees reads made
   by Python code; C extensions, other programs, network and environment variables are invisible, so
-  an empty answer is not proof. Delete stale `__pycache__` before a rerun: Python reuses a `.pyc`
-  when the source's size and modification second are unchanged.
+  an empty answer is not proof. If the hook never starts (the command is not Python, or Python ran
+  with `-I` or `-S`), it says so and exits with `2` instead of reporting "no undeclared files".
+  Delete stale `__pycache__` before a rerun: Python reuses a `.pyc` when the source's size and
+  modification second are unchanged.
 * `--strict-env` makes a rerun `INCONCLUSIVE` (without executing) if Python version, platform
   or recorded package versions differ.
 * `--clean-env` gives a rerun only a minimal environment (`PATH`, temp directories and the

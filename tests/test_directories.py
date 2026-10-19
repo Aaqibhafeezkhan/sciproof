@@ -488,3 +488,75 @@ def test_cli_roundtrip_with_directories(dirs, capsys):
     (dirs.root / "results" / "a.txt").write_text("tampered")
     assert cli.main(["verify", "cli.sciproof.json"]) == cli.EXIT_FAIL
     assert "1 modified (a.txt)" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- names that are not portable
+
+
+class _FakeEntry:
+    """A minimal ``os.DirEntry`` so that names Windows cannot create can be tested everywhere."""
+
+    def __init__(self, directory, name):
+        self.name = name
+        self.path = str(directory / name)
+
+    def is_symlink(self):
+        return False
+
+    def is_dir(self, follow_symlinks=True):
+        return False
+
+    def is_file(self, follow_symlinks=True):
+        return True
+
+
+class _FakeScandir:
+    def __init__(self, directory, names):
+        self._entries = [_FakeEntry(directory, name) for name in names]
+
+    def __enter__(self):
+        return iter(self._entries)
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+def _scan_names(tmp_path, monkeypatch, names):
+    monkeypatch.setattr("sciproof.treehash.os.scandir", lambda d: _FakeScandir(tmp_path, names))
+    monkeypatch.setattr("sciproof.treehash.sha256_file", lambda path: ("0" * 64, 1))
+    return scan_tree(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("aux.txt", "reserved Windows device name"),
+        ("NUL", "reserved Windows device name"),
+        ("com1.log", "reserved Windows device name"),
+        ("trail.", "ending with"),
+        ("trail ", "ending with"),
+        ("two\nlines", "control character"),
+        (r"back\slash", "backslash"),
+    ],
+)
+def test_names_that_mean_something_else_elsewhere_are_refused(tmp_path, monkeypatch, name, message):
+    """These would make the manifest invalid at write time, so the scan refuses them first."""
+    with pytest.raises(TreeError, match=message):
+        _scan_names(tmp_path, monkeypatch, ["ok.txt", name])
+
+
+def test_ordinary_names_close_to_reserved_ones_are_accepted(tmp_path, monkeypatch):
+    names = ["auxiliary.txt", "console", "com10.txt", "lpt0", ".hidden", "a b.txt", "ünï.txt"]
+    entries = _scan_names(tmp_path, monkeypatch, names)
+    assert sorted(e.path for e in entries) == sorted(names)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows cannot create these names")
+def test_capture_reports_a_non_portable_file_name_instead_of_failing_late(dirs):
+    code = (
+        "import pathlib; d = pathlib.Path('results'); d.mkdir(exist_ok=True); "
+        "(d / 'aux.txt').write_text('x')"
+    )
+    with pytest.raises(CaptureError, match="cannot record 'aux.txt'.*reserved Windows device"):
+        dirs.dirs_capture(argv=[sys.executable, "-c", code])
+    assert not dirs.dirs_manifest.exists()

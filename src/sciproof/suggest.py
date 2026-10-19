@@ -5,6 +5,11 @@ A small ``sitecustomize.py`` is put first on ``PYTHONPATH``; it installs an audi
 sees what Python code opens (including imported modules). It does **not** see reads done by
 C extensions through their own file handles, reads by non-Python subprocesses, network access
 or environment variables, so an empty answer is not proof that nothing was missed.
+
+The hook announces itself in the log when it is loaded. If that line is missing (the command was
+not Python, or Python ran with ``-I``/``-S`` and ignored ``PYTHONPATH``), nothing was observed and
+the result says so instead of reporting "no undeclared files". Paths are written hex-encoded, one
+per line, so a file name containing a line break cannot corrupt the log.
 """
 
 from __future__ import annotations
@@ -20,12 +25,14 @@ from sciproof.paths import to_manifest_path
 from sciproof.runner import CommandNotRunnable, CommandTimeout, run_command
 
 LOG_ENV = "SCIPROOF_AUDIT_LOG"
+HOOK_MARKER = b"#hook-loaded"
 
 _SITECUSTOMIZE = r"""
 import os, sys
 _log = os.environ.get("SCIPROOF_AUDIT_LOG")
 if _log:
     _fd = os.open(_log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0))
+    os.write(_fd, b"#hook-loaded\n")
     def _hook(event, args):
         if event != "open":
             return
@@ -38,7 +45,7 @@ if _log:
                        mode is not None and any(c in str(mode) for c in "wax+"))
             if writing:
                 return
-            os.write(_fd, os.fsencode(os.path.abspath(os.fsdecode(path))) + b"\n")
+            os.write(_fd, os.fsencode(os.path.abspath(os.fsdecode(path))).hex().encode() + b"\n")
         except Exception:
             pass
     sys.addaudithook(_hook)
@@ -50,6 +57,8 @@ _IGNORED_PARTS = {"__pycache__", ".git", ".hg", ".venv", "venv", "site-packages"
 @dataclass
 class Suggestions:
     exit_code: int
+    #: False if the audit hook never started, so nothing was observed at all.
+    hook_loaded: bool = True
     inside: list[str] = field(default_factory=list)  # undeclared files below the base directory
     outside: list[str] = field(default_factory=list)  # undeclared files elsewhere
 
@@ -78,31 +87,31 @@ def suggest_inputs(
         (tmp_path / "sitecustomize.py").write_text(_SITECUSTOMIZE, encoding="utf-8")
         log = tmp_path / "reads.log"
         log.touch()
-        saved = {key: os.environ.get(key) for key in ("PYTHONPATH", LOG_ENV)}
-        os.environ[LOG_ENV] = str(log)
-        existing = os.environ.get("PYTHONPATH")
-        os.environ["PYTHONPATH"] = str(tmp_path) + (os.pathsep + existing if existing else "")
+        # The command gets its own copy of the environment; this process's is never touched.
+        env = dict(os.environ)
+        env[LOG_ENV] = str(log)
+        existing = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = str(tmp_path) + (os.pathsep + existing if existing else "")
         try:
-            result = run_command(argv, base, timeout)
+            result = run_command(argv, base, timeout, env)
         except CommandTimeout as exc:
             raise CaptureError(f"{exc}; nothing was recorded") from exc
         except CommandNotRunnable as exc:
             raise CaptureError(str(exc)) from exc
-        finally:
-            for key, value in saved.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
         lines = log.read_bytes().split(b"\n")
+
+    hook_loaded = HOOK_MARKER in lines
 
     seen: set[Path] = set()
     inside: list[str] = []
     outside: list[str] = []
     for raw in lines:
-        if not raw:
+        if not raw or raw == HOOK_MARKER:
             continue
-        path = Path(os.fsdecode(raw))
+        try:
+            path = Path(os.fsdecode(bytes.fromhex(raw.decode("ascii"))))
+        except ValueError:
+            continue  # not a line written by the hook
         if path.suffix == ".pyc" and path.parent.name == "__pycache__":
             # a cached import: the module's source is what the experiment depends on
             path = path.parent.parent / (path.name.split(".", 1)[0] + ".py")
@@ -118,8 +127,10 @@ def suggest_inputs(
         if _is_declared(path, declared_paths):
             continue
         if path.is_relative_to(base):
-            if not path.name.endswith(".sciproof.json") and ".sciproof" not in path.name:
-                inside.append(path.relative_to(base).as_posix())
+            relative = path.relative_to(base)
+            # SciProof's own files: manifests, snapshot directories, rerun directories
+            if not any(".sciproof" in part for part in relative.parts):
+                inside.append(relative.as_posix())
         elif not any(path.is_relative_to(prefix) for prefix in prefixes):
             outside.append(str(path))
-    return Suggestions(result.exit_code, sorted(inside), sorted(outside))
+    return Suggestions(result.exit_code, hook_loaded, sorted(inside), sorted(outside))

@@ -10,9 +10,10 @@ not recorded, because they contain no file whose content could be compared.
 
 Symbolic links, devices, sockets and other special files are **refused** instead of followed or
 skipped: following them can leave the directory, and skipping them would let a change go
-unnoticed. File names that cannot be written the same way on every system (a backslash, a name
-that is not valid UTF-8) are refused as well. A tree is limited to ``MAX_TREE_FILES`` files so
-that a manifest stays small and a scan stays quick.
+unnoticed. File names that cannot mean the same thing on every system (a backslash, a control
+character, a Windows reserved name such as ``aux.txt``, a trailing dot or space, a name that is
+not valid UTF-8) are refused as well, by the same rules as any path in a manifest. A tree is
+limited to ``MAX_TREE_FILES`` files so that a manifest stays small and a scan stays quick.
 """
 
 from __future__ import annotations
@@ -24,8 +25,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sciproof.errors import SciProofError
+from sciproof.errors import SciProofError, UnsafePathError
 from sciproof.hashing import sha256_file
+from sciproof.paths import validate_relative_path
 
 MAX_TREE_FILES = 10_000
 MAX_NAMES_IN_DETAIL = 10
@@ -68,8 +70,11 @@ def scan_tree(root: Path, *, limit: int = MAX_TREE_FILES) -> list[FileEntry]:
             ) from exc
         for child in children:
             relative = f"{prefix}{child.name}"
-            if "\\" in child.name or "\x00" in child.name:
-                raise TreeError(f"unsupported file name {relative!r}: contains a backslash")
+            try:
+                # the same rules as every path in a manifest, so that what is scanned can be written
+                validate_relative_path(relative)
+            except UnsafePathError as exc:
+                raise TreeError(f"cannot record {relative!r}: {exc}") from None
             try:
                 child.name.encode("utf-8")
             except UnicodeEncodeError:

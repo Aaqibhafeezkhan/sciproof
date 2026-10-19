@@ -237,6 +237,14 @@ def _run_suggest(args: argparse.Namespace) -> int:
     found = suggest_inputs(command, Path.cwd(), args.input + args.output, args.timeout)
     if found.exit_code != 0:
         print(f"warning: the command exited with status {found.exit_code}", file=sys.stderr)
+    if not found.hook_loaded:
+        print(
+            "inconclusive: the audit hook never started, so no file reads were observed. The "
+            "command is probably not Python, or Python ran with -I or -S (which ignore "
+            "PYTHONPATH). Nothing can be said about undeclared inputs.",
+            file=sys.stderr,
+        )
+        return EXIT_INCONCLUSIVE
     for path in found.inside:
         print(f"suggest --input {safe_text(path)}")
     for path in found.outside:
