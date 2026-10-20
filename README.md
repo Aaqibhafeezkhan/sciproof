@@ -9,7 +9,7 @@ tolerance you declared?
 
 > **Status: alpha (0.1).** Small, local-first, offline, no runtime dependencies. The idea is
 > unproven with real users; see [the competitive analysis](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/COMPETITIVE_ANALYSIS.md) for
-> how it overlaps with existing tools (DVC, ReproZip, Sumatra, MLflow, RO-Crate).
+> how it overlaps with the most widely used tools (DVC, MLflow).
 
 ## The problem
 
@@ -149,10 +149,17 @@ A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/T
 ```text
 sciproof capture --name NAME [--input P]... [--output P]... [--output-numeric P]...
                  [--rtol X] [--atol Y] [--timeout S] [--max-log-bytes N]
-                 [--force] [--allow-nonzero] -- COMMAND [ARGS...]
+                 [--claim OUTPUT 'LOCATION OP VALUE']... [--note TEXT] [--record-hardware]
+                 [--force] [--allow-nonzero]
+                 -- COMMAND [ARGS...]
 sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--clean-env]
+                 [--allowed-signers FILE]
                  [--pass-env NAME]... [--timeout S] [--json]
 sciproof inspect MANIFEST
+sciproof diff    OLD NEW [--format text|json|markdown]
+sciproof sign    MANIFEST --key KEY
+sciproof list    [DIR] [-r] [--check] [--format text|json|markdown]
+sciproof export  MANIFEST [--format in-toto|openlineage] [-o FILE]
 sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
 ```
 
@@ -178,6 +185,26 @@ sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
   modification second are unchanged.
 * `--strict-env` makes a rerun `INCONCLUSIVE` (without executing) if Python version, platform
   or recorded package versions differ.
+* `--format markdown` prints the verification report as GitHub-flavoured Markdown for CI
+  summaries (`sciproof verify ... --format markdown >> "$GITHUB_STEP_SUMMARY"`), including a
+  table of numeric differences (recorded, found, absolute and relative difference, allowed).
+* `diff` compares two manifests and lists what changed between two recorded runs: command,
+  environment and packages, Git state, inputs, outputs (numeric ones with the baseline
+  tolerance) and exit code. It executes nothing. Exit status `0` if nothing differs, `1`
+  otherwise ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/DIFF.md)).
+* `--claim OUTPUT 'LOCATION OP VALUE'` records a statement about one value in a `.json` or
+  `.csv` output (`'$.accuracy >= 0.9'`, `'$.loss ~= 0.25 atol=0.01'`) that `verify` checks on the
+  recorded output and on every rerun. It shows that the value satisfies the comparison, nothing
+  more ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/CLAIMS.md)).
+* `--note TEXT` stores free text with the run (why it was made); `--record-hardware` also records
+  the CPU count, processor and NVIDIA GPUs (no host name, user name or serial numbers), and a
+  rerun on different hardware says so.
+* `sign` and `verify --allowed-signers FILE` sign a manifest and check the signature with
+  OpenSSH (`ssh-keygen -Y`); SciProof implements no cryptography and trusts only the file you
+  name ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/SIGNING.md)).
+* `list` shows the manifests in a directory, newest first; `list --check` verifies all of them
+  (integrity only) and exits with the worst result. `export` writes a manifest as an unsigned
+  in-toto Statement or as OpenLineage run events ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/LIST_AND_EXPORT.md)).
 * `--clean-env` gives a rerun only a minimal environment (`PATH`, temp directories and the
   numerics-related variables SciProof records) instead of all of yours, so a manifest from
   someone else cannot read your credentials from it. `--pass-env NAME` adds a variable. It
@@ -212,10 +239,7 @@ Manifest format: [docs/MANIFEST.md](https://github.com/hayagrivai-labs/sciproof/
 | Tool | Relation |
 | --- | --- |
 | [DVC](https://doc.dvc.org/start/data-pipelines/data-pipelines) | Pipelines with hashes of dependencies and outputs; heavier, more powerful. If you already use it you largely have integrity checking. |
-| [ReproZip](https://docs.reprozip.org/en/1.x/) | Packs a Linux experiment with its files and dependencies so it can be rerun elsewhere. SciProof does not package anything. |
-| [Sumatra](https://sumatra.readthedocs.io/en/latest/introduction.html) | Electronic-lab-notebook style run records. |
 | [MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/) | Experiment tracking for ML with parameters and metrics, optional UI. |
-| [RO-Crate](https://www.researchobject.org/ro-crate/specification/1.1/introduction.html) | A standard to *describe* research outputs; does not verify them. Mapping study: [docs/DESIGN_RO_CRATE.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/DESIGN_RO_CRATE.md). |
 
 Full analysis, with what could not be confirmed: [docs/COMPETITIVE_ANALYSIS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/COMPETITIVE_ANALYSIS.md).
 

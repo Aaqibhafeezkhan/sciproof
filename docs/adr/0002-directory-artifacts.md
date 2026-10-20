@@ -7,7 +7,7 @@
 ## Context
 
 Many experiments write a directory of results, and until now every file had to be declared one by
-one. The competitive audit found that ReproLedger already hashes directories as sorted trees.
+one. DVC, the most widely used tool in the area, handles directories as a matter of course.
 Issue #5 listed four open questions: the schema, symbolic links, size limits, and numeric
 comparison inside directories.
 

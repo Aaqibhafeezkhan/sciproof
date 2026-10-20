@@ -1,55 +1,55 @@
 # Benchmarks
 
-Eight verification scenarios, run end to end through the command-line tools in fresh temporary
-directories. Reproduce with `python benchmarks/run_benchmarks.py` (SciProof only) or add
-`--reproledger PATH` to include [ReproLedger](COMPETITIVE_ANALYSIS.md), which you install
-yourself in a separate environment. The script never installs or downloads anything.
+Ten verification situations, run end to end through the SciProof command line in fresh
+temporary directories. Reproduce with `python benchmarks/run_benchmarks.py` (add `--json FILE` for
+the raw numbers and `--repeat N` for the overhead table). The script exits with `1` if SciProof
+gives an outcome other than the expected one, so it also works as a smoke test.
 
 ## What this does and does not show
 
-* **Measured:** the verdict or exit code each tool gives (does it detect the situation?), and
-  wall-clock time of whole command invocations.
+* **Measured:** the verdict or exit code SciProof gives in each situation, and the wall-clock time
+  of whole command invocations.
 * **Not measured:** memory, large files, many runs, other operating systems, report clarity as
   judged by users, setup effort beyond the commands in the script.
 * **Bias to keep in mind:** the "expected" outcomes were defined by the SciProof authors from
-  SciProof's documented semantics. A tool with a different design (ReproLedger has two verdicts,
-  not three) can only be shown as "differs", which is not the same as "wrong".
-* **Not compared:** DVC, ReproZip, MLflow, noWorkflow and VeriRepro were not run. Their
-  workflows are not equivalent tasks (pipelines, packaging, tracking servers, paper pipelines),
-  so no numbers are reported for them. No claim of speed or reliability against them is made.
+  SciProof's documented semantics. A run where every outcome matches shows that SciProof does what
+  it documents, not that the documented behaviour is what everyone wants.
+* **Not compared:** [DVC and MLflow](COMPETITIVE_ANALYSIS.md) were not run. Their workflows are not
+  equivalent tasks (pipelines and data versioning; a tracking server and UI), so no numbers are
+  reported for them and no claim of speed or reliability against them is made.
 
 ## Conditions of the recorded run
 
-* 2026-10-18, Windows 11, Python 3.13.1, one machine, nothing else running.
-* SciProof 0.1.1 plus the changes in this branch; ReproLedger 0.1.0 installed from its
-  repository into a separate virtual environment.
+* 2026-10-19, Windows 11, Python 3.13.1, one machine, nothing else running.
+* SciProof as of the commit that introduced `sciproof diff` and `verify --format markdown`.
 * The experiment reads `data.json`, writes `result.json` (a value that can be nudged through an
   environment variable) and takes about 0.1 s. Times are of the whole CLI invocation, including
   interpreter start-up.
 
 ## Scenario results
 
-`Observed` is the verdict derived from the tool's exit code. Exit codes: SciProof 0/1/2/3 =
-PASS/FAIL/INCONCLUSIVE/error; ReproLedger 0 = pass, 4 = fail, 3 or 5 = error.
+`Observed` is derived from the exit code: `0` PASS, `1` FAIL, `2` INCONCLUSIVE, `3` error.
 
-| Scenario | SciProof | ReproLedger |
+| Scenario | Expected | Observed |
 | --- | --- | --- |
 | 1. Unchanged deterministic experiment, integrity check | PASS | PASS |
-| 1b. Same, verified by re-execution | PASS | not supported (`replay` only prints a plan) |
+| 1b. Same, verified by re-execution | PASS | PASS |
 | 2. Modified input file | FAIL | FAIL |
 | 3. Modified output file | FAIL | FAIL |
-| 4. Numeric output within the tolerance (rerun, `eps=1e-9`, `rtol=1e-6`) | PASS | not supported (no rerun, no tolerance) |
-| 5. Numeric output outside the tolerance (rerun, `eps=1e-2`) | FAIL | not supported |
-| 6. Missing required evidence (an input file deleted) | INCONCLUSIVE | FAIL (only pass/fail exist; a missing file is a failed check) |
-| 7a. Truncated manifest | error (exit 3) | error (exit 5) |
-| 7b. Manifest with a repeated key | error (exit 3) | not run (its manifest is protected by a sidecar digest, so an edit is not an equivalent test) |
-| 7c. Manifest hash edited to a wrong value / manifest edited | FAIL | FAIL |
-| 8a. Command fails during capture | evidence written, exit 1 | evidence written, exit 3 (the command's exit code) |
-| 8b. Capture exceeds a timeout | exit 3, no evidence written | not supported (`run` has no timeout option) |
+| 4. Numeric output within the tolerance (rerun, `eps=1e-9`, `rtol=1e-6`) | PASS | PASS |
+| 5. Numeric output outside the tolerance (rerun, `eps=1e-2`) | FAIL | FAIL |
+| 6. Missing required evidence (an input file deleted) | INCONCLUSIVE | INCONCLUSIVE |
+| 7a. Truncated manifest | error | error (exit 3) |
+| 7b. Manifest with a repeated key | error | error (exit 3) |
+| 7c. Manifest hash edited to a wrong value | FAIL | FAIL |
+| 8a. Command fails during capture | FAIL, evidence written | exit 1, evidence written |
+| 8b. Capture exceeds a timeout | error, no evidence | exit 3, no evidence written |
+| 9. Rerun whose command never writes the output, with the old output still on disk | FAIL | FAIL ("the rerun did not produce this file") |
+| 10. A recorded claim (`$.value < 40`) that does not hold for the value 42 | FAIL | FAIL |
 
-SciProof gave the expected outcome in all 12 of its scenarios. ReproLedger ran 7 scenarios and
-matched the expectation in 6; in scenario 6 its two-valued design reports FAIL instead of
-INCONCLUSIVE. It could not run 4 scenarios (1b, 4, 5, 8b), and scenario 7b was not run.
+All 14 matched the expectation. Scenario 9 is the one that found a real defect: before the fix, the old
+output stayed in place while the command ran and the rerun was reported as `PASS` (reproduced by hand
+on the previous code; the benchmark itself was added with the fix).
 
 ## Overhead
 
@@ -57,25 +57,25 @@ Median of 7 runs of one cycle in a fresh directory, in seconds:
 
 | Step | Seconds |
 | --- | --- |
-| The experiment alone | 0.099 |
-| `sciproof capture` | 0.618 |
-| `sciproof verify` (integrity only) | 0.193 |
-| `sciproof verify --rerun --yes` | 0.606 |
+| The experiment alone | 0.121 |
+| `sciproof capture` | 0.701 |
+| `sciproof verify` (integrity only) | 0.225 |
+| `sciproof verify --rerun --yes` | 0.689 |
 
-Reading the numbers honestly: for a 0.1 s experiment, `capture` adds about half a second. A
-direct measurement of its parts on this machine gives about 0.14 s to list the installed
-packages in a child interpreter and 0.04 s for `git status`, plus the experiment itself and
-start-up. This is a roughly fixed cost, not a measure of scalability, and it grows with the
-number of installed packages. Integrity verification costs about one interpreter start-up plus
-hashing the declared files. For comparison, a single (not repeated) `reproledger verify` in
-scenario 1 took 0.19 s.
+Reading the numbers honestly: for a 0.1 s experiment, `capture` adds about half a second. Timing
+its parts separately on this machine (median of 5): about 0.21 s for the child interpreter that
+lists the installed packages, 0.08 s for the three `git` calls and 0.08 s to import SciProof, on
+top of the experiment and process start-up (an empty child Python takes 0.06 s). This is a roughly
+fixed cost, not a measure of scalability, and the package listing grows with the number of
+installed packages. The package listing could run concurrently with the command, but it must
+describe the environment *before* the command ran (a command may install packages), so it is
+not overlapped. Integrity verification costs about one interpreter start-up plus hashing the
+declared files.
 
 ## What the benchmark found
 
-* The new report fields (evidence, `basis`, `not checked`) and the refusal of duplicate keys
-  (scenario 7b) behave as designed. Before this change a repeated key in a manifest was accepted
-  and the last value won (shown with `schema_version` in a probe before the fix; the benchmark
-  itself was not run against the old code).
-* Nothing here shows SciProof is faster or more reliable than another tool. It shows that on
-  these eight situations it detects what it documents, and that the audited alternatives do not
-  cover scenarios 1b, 4, 5, 6 (as a distinct verdict) and 8b.
+* Before the strict-JSON change a repeated key in a manifest was accepted and the last value won
+  (shown with `schema_version` in a probe before the fix; the benchmark itself was not run against
+  the old code). Scenario 7b now ends in an error.
+* The numbers show the fixed cost of a capture (about 0.6 s) is the main thing to improve if
+  experiments are very short.

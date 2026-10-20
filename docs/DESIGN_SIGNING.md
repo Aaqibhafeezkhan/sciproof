@@ -1,6 +1,8 @@
 # Design note: signing and timestamping manifests
 
-Status: **recommendation, no code yet.** Discussion: issue #9.
+Status: **implemented as a thin `ssh-keygen` wrapper** (`sciproof sign`, `verify --allowed-signers`); see
+[Signing a manifest](SIGNING.md). This note keeps the reasoning and the alternatives that were
+not chosen. Discussion: issue #9.
 
 ## The problem
 

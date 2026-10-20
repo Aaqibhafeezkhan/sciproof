@@ -38,6 +38,9 @@ CLEAN_ENV_BASE = ("PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "TMPDIR"
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 PROBE_TIMEOUT_SECONDS = 30
+GPU_PROBE_TIMEOUT_SECONDS = 10
+MAX_GPUS = 16
+_GPU_QUERY = ("--query-gpu=name,driver_version,memory.total", "--format=csv,noheader,nounits")
 
 # Executed by the interpreter that runs the experiment. It prints one JSON document.
 _PROBE_SCRIPT = r"""
@@ -54,6 +57,46 @@ print(json.dumps({
     "packages": sorted(seen.values(), key=lambda item: item[0].lower()),
 }))
 """
+
+
+def hardware_info() -> dict[str, Any]:
+    """CPU count, processor and NVIDIA GPUs (opt-in: ``capture --record-hardware``).
+
+    Hardware can change numerical results (thread counts, GPU kernels), so it is worth
+    comparing. Only what is needed for that is recorded: no host name, user name, serial
+    number or GPU UUID. GPUs are listed through ``nvidia-smi`` if it is installed; its
+    absence is recorded as such, not as "no GPU".
+    """
+    gpus: list[dict[str, Any]] = []
+    executable = shutil.which("nvidia-smi")
+    probe = "nvidia-smi" if executable else "none"
+    if executable:
+        try:
+            completed = subprocess.run(  # noqa: S603
+                [executable, *_GPU_QUERY],
+                capture_output=True,
+                text=True,
+                timeout=GPU_PROBE_TIMEOUT_SECONDS,
+                check=True,
+            )
+            for line in completed.stdout.splitlines()[:MAX_GPUS]:
+                parts = [part.strip() for part in line.split(",")]
+                if len(parts) >= 3 and parts[0]:
+                    gpus.append(
+                        {
+                            "name": ",".join(parts[:-2])[:100],
+                            "driver": parts[-2][:40],
+                            "memory_mib": int(parts[-1]) if parts[-1].isdigit() else None,
+                        }
+                    )
+        except (OSError, subprocess.SubprocessError):
+            probe = "failed"
+    return {
+        "cpu_count": os.cpu_count(),
+        "processor": platform.processor()[:200],
+        "gpu_probe": probe,
+        "gpus": gpus,
+    }
 
 
 def platform_info() -> dict[str, str]:

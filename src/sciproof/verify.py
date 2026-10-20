@@ -25,8 +25,10 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from sciproof.claims import MISSING, claim_text, evaluate, json_safe
 from sciproof.environment import (
     clean_environment,
+    hardware_info,
     interpreter_info,
     platform_info,
     selected_env_vars,
@@ -35,7 +37,7 @@ from sciproof.errors import ConfirmationRequired, UnsafePathError, UsageError
 from sciproof.gitinfo import git_info
 from sciproof.hashing import sha256_bytes, sha256_file
 from sciproof.manifest import load_manifest
-from sciproof.numeric import NumericFormatError, compare, load_numeric
+from sciproof.numeric import NumericFormatError, compare_detailed, load_numeric
 from sciproof.paths import resolve_inside
 from sciproof.runner import (
     CommandInterrupted,
@@ -43,6 +45,7 @@ from sciproof.runner import (
     CommandTimeout,
     run_command,
 )
+from sciproof.signing import NAMESPACE, check_signature
 from sciproof.textutil import safe_text
 from sciproof.treehash import TreeDiff, TreeError, diff_trees, scan_tree, tree_digest
 
@@ -70,6 +73,11 @@ ALWAYS_NOT_CHECKED = (
     "files that were not declared as inputs or outputs",
     "authenticity: manifests are unsigned, so who produced this evidence is not verified",
 )
+UNSIGNED_ITEM = ALWAYS_NOT_CHECKED[2]
+SIGNED_ITEM = (
+    "whether the experiment was run honestly: a good signature shows only that the holder of an "
+    "allowed key vouched for this manifest"
+)
 
 
 @dataclass
@@ -94,6 +102,10 @@ class Report:
     clean_env: bool = False
     #: Names (never values) of the variables handed to a --clean-env rerun.
     env_passed: list[str] = field(default_factory=list)
+    #: Outcome of the signature check (``--allowed-signers``), or ``None`` if not asked for.
+    signature: dict[str, Any] | None = None
+    #: True once the manifest's claims have been looked at.
+    claims_checked: bool = False
 
     def add(
         self,
@@ -112,6 +124,12 @@ class Report:
         if Status.INCONCLUSIVE in statuses or not statuses:
             return Status.INCONCLUSIVE
         return Status.PASS
+
+    def to_markdown(self) -> str:
+        """The report as GitHub-flavoured Markdown (a CI summary or a pull-request comment)."""
+        from sciproof.markdown import report_markdown
+
+        return report_markdown(self)
 
     def to_dict(self) -> dict[str, Any]:
         """The report as plain data, in the ``sciproof.report`` JSON schema (docs/REPORT.md)."""
@@ -148,6 +166,13 @@ class Report:
     def not_checked(self) -> list[str]:
         """What this verification did *not* establish."""
         items = list(ALWAYS_NOT_CHECKED)
+        if self.signature is not None and self.signature["status"] == "good":
+            items[items.index(UNSIGNED_ITEM)] = SIGNED_ITEM
+        if self.claims_checked:
+            items.append(
+                "whether a claim is the right criterion: a claim that holds shows only that the "
+                "value satisfies the comparison, not that the comparison is meaningful"
+            )
         if self.rerun_executed:
             items += [
                 "stdout and stderr of the rerun: compared for information only, not in the verdict",
@@ -220,6 +245,86 @@ def _unchanged_message(state: _State, item: dict[str, Any]) -> str:
     if state.directory:
         return f"unchanged ({len(item.get('files') or [])} files, tree SHA-256 matches)"
     return "unchanged (SHA-256 matches)"
+
+
+def _check_signature(manifest_path: Path, allowed_signers: Path, report: Report) -> None:
+    """Add the result of checking ``<manifest>.sig`` (a missing signature is not a pass)."""
+    result = check_signature(manifest_path, allowed_signers)
+    evidence = {
+        "kind": "manifest_signature",
+        "namespace": NAMESPACE,
+        "signature_file": result.signature_file,
+        "principal": result.principal,
+        "key_type": result.key_type,
+        "fingerprint": result.fingerprint,
+    }
+    report.signature = {"status": result.status, **evidence}
+    status = {
+        "good": Status.PASS,
+        "bad": Status.FAIL,
+    }.get(result.status, Status.INCONCLUSIVE)
+    report.add(status, "manifest signature", result.message, evidence)
+
+
+def _check_claims(
+    base: Path,
+    manifest: dict[str, Any],
+    report: Report,
+    phase: str,
+    intact: set[str] | None = None,
+) -> None:
+    """Check the manifest's claims on the recorded outputs (``phase="recorded"``) or on the
+    outputs of a rerun (``phase="rerun"``).
+
+    On the recorded files a claim is only judged if the output still has the recorded hash;
+    otherwise it is ``INCONCLUSIVE``, because a claim about a modified file says nothing about
+    the evidence.
+    """
+    claims = manifest.get("claims") or []
+    if not claims:
+        return
+    report.claims_checked = True
+    cache: dict[str, dict[str, object] | str] = {}
+    for claim in claims:
+        output = claim["output"]
+        subject = ("rerun claim " if phase == "rerun" else "claim ") + claim_text(claim)
+        evidence: dict[str, Any] = {
+            "kind": "claim",
+            "phase": phase,
+            "output": output,
+            "location": claim["location"],
+            "op": claim["op"],
+            "value": claim["value"],
+        }
+        if claim["op"] == "~=":
+            evidence["rtol"], evidence["atol"] = claim["rtol"], claim["atol"]
+        if phase == "recorded" and output not in (intact or set()):
+            report.add(
+                Status.INCONCLUSIVE,
+                subject,
+                f"not judged: {output} no longer matches the recorded evidence, so the claim "
+                "says nothing about it",
+                evidence,
+            )
+            continue
+        if output not in cache:
+            try:
+                path = resolve_inside(base, output)
+                if not path.is_file():
+                    cache[output] = "the rerun did not produce this file"
+                else:
+                    cache[output] = dict(load_numeric(path))
+            except (UnsafePathError, NumericFormatError) as exc:
+                cache[output] = f"cannot be read: {exc}"
+        leaves = cache[output]
+        if isinstance(leaves, str):
+            status = Status.INCONCLUSIVE if "did not produce" in leaves else Status.FAIL
+            report.add(status, subject, f"not judged: {output} {leaves}", evidence)
+            continue
+        result = evaluate(claim, leaves)
+        evidence["found"] = None if result.found is MISSING else json_safe(result.found)
+        evidence["present"] = result.found is not MISSING
+        report.add(Status.PASS if result.holds else Status.FAIL, subject, result.message, evidence)
 
 
 def _resolve(base: Path, relative: str, report: Report, subject: str) -> Path | None:
@@ -382,7 +487,29 @@ def _compare_environment(base: Path, manifest: dict[str, Any]) -> list[str]:
             differences.append(f"environment variable {name} is set now, was not at capture time")
         elif now_vars[name] != recorded_vars[name]:
             differences.append(f"environment variable {name} differs from the recorded value")
+    differences.extend(_compare_hardware(recorded_env.get("hardware")))
     return differences
+
+
+def _compare_hardware(recorded: dict[str, Any] | None) -> list[str]:
+    """Differences between the recorded hardware and this machine (only if it was recorded)."""
+    if recorded is None:
+        return []
+    now = hardware_info()
+    differences = []
+    if now["cpu_count"] != recorded["cpu_count"]:
+        differences.append(f"CPU count: {recorded['cpu_count']} was used, now {now['cpu_count']}")
+    old_gpus = [(g["name"], g["driver"]) for g in recorded["gpus"]]
+    new_gpus = [(g["name"], g["driver"]) for g in now["gpus"]]
+    if old_gpus != new_gpus and (
+        recorded["gpu_probe"] == now["gpu_probe"] == "nvidia-smi" or old_gpus or new_gpus
+    ):
+        differences.append(f"GPUs: {_gpu_text(old_gpus)} were used, now {_gpu_text(new_gpus)}")
+    return differences
+
+
+def _gpu_text(gpus: list[tuple[str, str]]) -> str:
+    return ", ".join(f"{name} (driver {driver})" for name, driver in gpus) or "none"
 
 
 # --------------------------------------------------------------------------------------------
@@ -508,7 +635,7 @@ def _compare_rerun(
             "rule": NUMERIC_RULE,
         }
         try:
-            differences = compare(load_numeric(snapshot), load_numeric(path), rtol, atol)
+            details = compare_detailed(load_numeric(snapshot), load_numeric(path), rtol, atol)
         except NumericFormatError as exc:
             report.add(
                 Status.FAIL,
@@ -517,7 +644,9 @@ def _compare_rerun(
                 {**numeric_evidence, "differences": None, "error": str(exc)},
             )
             continue
+        differences = [d.message for d in details]
         numeric_evidence["differences"] = differences
+        numeric_evidence["difference_details"] = [d.to_dict() for d in details]
         if differences:
             report.add(
                 Status.FAIL,
@@ -588,6 +717,16 @@ def _rerun(
                 shutil.copy2(target, backup_root / relative)
                 had_original.add(relative)
 
+        # Start from a clean slate. A stale output left over from the recorded run would
+        # otherwise "reproduce" the result even if the command never wrote it (a bug, a wrong
+        # path, an early exit). The originals are backed up above and restored afterwards.
+        for relative in sorted(had_original):
+            target = resolve_inside(base, relative)
+            if relative in directory_outputs:
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+
         try:
             argv = manifest["command"]["argv"]
             result = (
@@ -609,6 +748,7 @@ def _rerun(
 
         report.rerun_executed = True
         _compare_rerun(base, manifest, snapshots, result, report)
+        _check_claims(base, manifest, report, "rerun")
 
         # A rerun must not damage the evidence it is checked against.
         for item in manifest["inputs"]:
@@ -668,6 +808,7 @@ def verify(
     confirm: Callable[[str], bool] | None = None,
     clean_env: bool = False,
     pass_env: Sequence[str] = (),
+    allowed_signers: Path | str | None = None,
 ) -> Report:
     """Verify ``manifest_path``.
 
@@ -687,8 +828,19 @@ def verify(
     base = manifest_path.parent
     report = Report(name=manifest["name"], rerun_requested=rerun)
 
+    if allowed_signers is not None:
+        _check_signature(manifest_path, Path(allowed_signers), report)
+
     inputs_intact = _check_inputs(base, manifest, report)
     snapshots = _check_outputs(base, manifest, report)
+    intact = {
+        item["path"]
+        for item in manifest["outputs"]
+        if any(
+            c.subject == f"output {item['path']}" and c.status is Status.PASS for c in report.checks
+        )
+    }
+    _check_claims(base, manifest, report, "recorded", intact)
 
     recorded_git = manifest.get("git")
     if recorded_git and recorded_git["dirty"]:
@@ -801,6 +953,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
         "rerun_executed": report.rerun_executed,
         "clean_env": report.clean_env,
         "env_passed": list(report.env_passed),
+        "signature": report.signature,
         "checks": [
             {
                 "status": c.status.value,

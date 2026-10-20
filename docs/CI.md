@@ -56,4 +56,18 @@ own team to a protected branch.
         run: sciproof verify baseline.sciproof.json --rerun --yes --strict-env --clean-env --json
 ```
 
+## Showing the result in the job summary
+
+`--format markdown` writes the report as Markdown, with a table of the numeric differences, which
+GitHub shows on the run page when it is appended to `$GITHUB_STEP_SUMMARY`. The exit code is
+unchanged, so the step still fails on `FAIL` or `INCONCLUSIVE` and the summary is written either way.
+
+```yaml
+      - name: Verify the recorded experiment
+        run: sciproof verify baseline.sciproof.json --format markdown >> "$GITHUB_STEP_SUMMARY"
+```
+
+To see what changed between the committed baseline and a fresh capture, use
+`sciproof diff baseline.sciproof.json candidate.sciproof.json --format markdown`.
+
 Details: [Security and threat model](../SECURITY.md).

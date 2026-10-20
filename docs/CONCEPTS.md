@@ -46,7 +46,11 @@ says so in `environment.source`).
 ## What a rerun does to your directory
 
 `verify --rerun` runs the command in the manifest's directory. Before running, existing
-declared outputs are copied to a temporary directory; afterwards the files produced by the
+declared outputs are copied to a temporary directory and **removed**, so that the command starts
+without them: an old file must not be able to "reproduce" a result that the command never wrote
+(an output the command does not produce is reported as `FAIL`: "the rerun did not produce this
+file"). A command that skips work when its output already exists will therefore do the work
+again. Afterwards the files produced by the
 rerun that differ from the originals are moved to `.sciproof-rerun-<timestamp>/` (nothing is
 moved, and no directory is created, if the rerun did not change an output) and your original outputs are restored, so
 checking evidence never overwrites the evidence. The command itself can still do anything the

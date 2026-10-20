@@ -8,4 +8,4 @@ labels: enhancement
 
 **What did you try with SciProof, and what was awkward or missing?**
 
-**Existing tools you considered** (DVC, ReproZip, MLflow, containers, ...) and why they were not enough:
+**Existing tools you considered** (DVC, MLflow, containers, ...) and why they were not enough:

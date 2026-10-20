@@ -13,14 +13,15 @@ of computational experiments.*
   rule that produced the verdict, and what was not established. This was missing in SciProof too,
   and is now implemented ([Report](REPORT.md)).
 * **"Claim-aware" does not survive in the form first imagined.** Linking *scientific claims* to
-  evidence is VeriRepro's territory (it starts from a paper's PDF and has a much larger
-  machinery). SciProof records no claims and extracts none, and that is deliberate: a claim a
-  tool cannot check mechanically is a claim it must not appear to endorse. The honest version is
+  evidence would need paper and claim extraction machinery that is far outside this tool.
+  SciProof records no claims and extracts none, and that is deliberate: a claim a tool cannot
+  check mechanically is a claim it must not appear to endorse. The honest version is
   "**claim-limited**": every report states exactly what was and was not established.
 * **The remaining differentiator is a combination, not a feature:** three-valued verdict with a
   conservative rule, declared numeric tolerances with stated semantics, a confirmed and timed
-  rerun, and an explicit "not checked" list, with no runtime dependencies. This is true of the
-  audited projects on one date and is **unproven with users**.
+  rerun, an explicit "not checked" list, and a comparison of two recorded runs, with no runtime
+  dependencies. This is a statement about the two audited projects (DVC and MLflow, see the
+  [competitive analysis](COMPETITIVE_ANALYSIS.md)) on one date and is **unproven with users**.
 
 ## Personas
 
@@ -43,7 +44,8 @@ will run, to run it in a throw-away environment, and a verdict that says what it
 ## Primary use case
 
 Persona 2 is the sharpest: it needs the tolerance comparison and the exit-code contract, which
-are the audited gaps in ReproLedger (no tolerance, no rerun) and DVC (no documented tolerance).
+are the gaps the audit found in DVC (no documented tolerance, no verdict) and MLflow (not
+established).
 Persona 1 is the most numerous and is served by the same tool with a gentler path. Persona 3
 depends on the safe-rerun work below.
 
@@ -55,10 +57,8 @@ depends on the safe-rerun work below.
 | If you already use | You may not need SciProof, because | You may still choose SciProof because |
 | --- | --- | --- |
 | DVC | it hashes inputs and outputs and reruns stages | you do not want a pipeline system, and need tolerances and an explicit verdict (DVC documents none for `metrics diff`) |
-| ReproLedger | it records evidence bundles and verifies integrity | you need a rerun, numeric tolerances, a third verdict (INCONCLUSIVE) or a timeout |
 | MLflow | it tracks runs and artifacts | you want a check, not a tracker or a UI |
-| ReproZip / containers | they capture the whole environment | you only need to check results, not rebuild the machine |
-| VeriRepro | it reproduces a published paper's claims | you verify your own experiment and want no network, models or Docker |
+| Containers, Nix, conda | they capture the whole environment | you only need to check results, not rebuild the machine |
 | `pytest.approx` | it compares numbers in tests | you need the reference values recorded with their provenance |
 
 ## Candidate improvements, scored
@@ -75,11 +75,12 @@ or risk. "Diff." is verified differentiation against the audited projects.
 | Directory artifacts (issue #5) | 4 | 2 | 3 | 4 | 3 | 4 | 4 | **Done** |
 | B. Verification policy file | 3 | 4 | 3 | 4 | 2 | 4 | 3 | Wait for evidence |
 | D. More provenance (resource metadata, config capture) | 3 | 2 | 4 | 3 | 3 | 4 | 3 | Wait for evidence |
-| F. Portable evidence bundle | 3 | 3 | 2 | 4 | 2 | 3 | 3 | Wait; see [signing](DESIGN_SIGNING.md) and [RO-Crate](DESIGN_RO_CRATE.md) notes |
+| F. Portable evidence bundle | 3 | 3 | 2 | 4 | 2 | 3 | 3 | Wait; see the [signing](DESIGN_SIGNING.md) and [RO-Crate](DESIGN_RO_CRATE.md) design notes |
 
 Reasoning for the two the audit pushed down: a policy file (B) adds a second configuration
 surface before anyone has said that flags are not enough; richer provenance (D) is where
-noWorkflow and ReproZip are strong and where SciProof would only be a weaker copy.
+specialised provenance and environment-capture tools are strong and where SciProof would only
+be a weaker copy.
 
 ## The five highest-priority improvements
 
@@ -95,17 +96,29 @@ noWorkflow and ReproZip are strong and where SciProof would only be a weaker cop
    notebooks. Persona 2 asked for CI first, notebooks second.
 5. **Directory artifacts.** Done (schema 1.1): `--input DIR` and `--output DIR` record a
    sorted file list and a tree digest, and verification names added, removed and modified
-   files. ReproLedger already hashed directories; this closes that gap.
+   files. DVC handles directories as a matter of course; this closes that gap.
+
+## Added after the first five
+
+Chosen by comparing with the two widely used tools in the [competitive analysis](COMPETITIVE_ANALYSIS.md)
+rather than by user demand, so they are the first things to drop if users do not care:
+
+* **A table of numeric differences** (recorded, found, absolute and relative difference, allowed
+  difference) in the JSON and Markdown report. DVC prints a metrics table but documents no
+  tolerance; SciProof shows how far each value is from what the tolerance allows.
+* **Markdown output for CI** (`verify --format markdown`), for job summaries.
+* **`sciproof diff`**: what changed between two recorded runs (command, packages, Git state,
+  inputs, outputs, exit code), which is the question behind the first persona's pain.
 
 ## Explicitly excluded from the MVP
 
 * Sandboxing or isolation claims. A subprocess is not a sandbox and will not be described as one.
-* Reconstructing environments (containers, lock files): ReproZip, Nix and conda do that.
+* Reconstructing environments (containers, lock files): containers, Nix and conda do that.
 * A server, database, accounts, telemetry, dashboards, or any hosted component.
 * Extracting or grading claims from papers; any model-assisted analysis.
 * A new interchange standard. Export to RO-Crate or in-toto may come later if users ask.
 * Cryptographic signing in the MVP; manifests are unsigned and every report says so.
-* Fine-grained provenance inside a script (noWorkflow's territory).
+* Fine-grained provenance inside a script.
 
 ## Validation plan with real users
 

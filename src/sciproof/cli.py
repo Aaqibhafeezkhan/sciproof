@@ -16,8 +16,18 @@ from pathlib import Path
 
 from sciproof import __version__
 from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, capture
-from sciproof.errors import ConfirmationRequired, SciProofError
+from sciproof.diffmanifests import diff_manifests, format_diff_json
+from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
+from sciproof.export import format_in_toto, format_openlineage
 from sciproof.inspect_manifest import inspect_file
+from sciproof.ledger import (
+    format_json,
+    format_markdown,
+    format_text,
+    list_manifests,
+    worst_verdict,
+)
+from sciproof.signing import sign_manifest
 from sciproof.suggest import suggest_inputs
 from sciproof.textutil import safe_text
 from sciproof.verify import (
@@ -103,6 +113,28 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_LOG_BYTES,
         help="keep at most this many bytes of stdout and of stderr in the manifest",
     )
+    cap.add_argument(
+        "--claim",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("OUTPUT", "EXPRESSION"),
+        help="record a checkable claim about a value in a declared .json/.csv output, for example "
+        "--claim out/metrics.json '$.accuracy >= 0.9' (operators: == != < <= > >= and "
+        "'~=' with rtol=/atol=); verify checks it; repeatable",
+    )
+    cap.add_argument(
+        "--note",
+        metavar="TEXT",
+        help="free text stored in the manifest (why this run was made, what to look for; "
+        "at most 2000 characters, never interpreted)",
+    )
+    cap.add_argument(
+        "--record-hardware",
+        action="store_true",
+        help="also record the CPU count, processor and NVIDIA GPUs (via nvidia-smi); no host "
+        "name, user name or serial numbers; a rerun then reports differences",
+    )
     cap.add_argument("--force", action="store_true", help="overwrite an existing manifest")
     cap.add_argument(
         "--allow-nonzero",
@@ -146,6 +178,13 @@ def _build_parser() -> argparse.ArgumentParser:
         help="with --clean-env: also pass this environment variable; repeatable",
     )
     ver.add_argument(
+        "--allowed-signers",
+        type=Path,
+        metavar="FILE",
+        help="also check the signature <manifest>.sig against this OpenSSH allowed-signers "
+        "file; a missing signature is INCONCLUSIVE, a wrong one FAIL",
+    )
+    ver.add_argument(
         "--timeout",
         type=float,
         default=DEFAULT_RERUN_TIMEOUT_SECONDS,
@@ -156,7 +195,14 @@ def _build_parser() -> argparse.ArgumentParser:
     ver.add_argument(
         "--json",
         action="store_true",
-        help="print the report as one JSON object (exit codes are unchanged)",
+        help="print the report as one JSON object (same as --format json)",
+    )
+    ver.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default=None,
+        help="report format: text (default), json, or markdown for CI summaries "
+        "(for example: >> $GITHUB_STEP_SUMMARY); exit codes are the same for all",
     )
 
     sug = sub.add_parser(
@@ -171,6 +217,67 @@ def _build_parser() -> argparse.ArgumentParser:
     sug.add_argument("--output", action="append", default=[], metavar="PATH")
     sug.add_argument("--timeout", type=float, default=None, metavar="SECONDS")
     sug.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND [ARGS...]")
+
+    sig = sub.add_parser(
+        "sign",
+        help="sign a manifest with an OpenSSH private key (writes <manifest>.sig)",
+        description=(
+            "Sign MANIFEST with the OpenSSH private key in KEY by calling ssh-keygen -Y sign. "
+            "The detached signature is written to MANIFEST.sig. Check it later with "
+            "'sciproof verify MANIFEST --allowed-signers FILE'."
+        ),
+    )
+    sig.add_argument("manifest", type=Path)
+    sig.add_argument("--key", type=Path, required=True, metavar="KEY", help="private key file")
+
+    dif = sub.add_parser(
+        "diff",
+        help="compare two manifests: what changed between two recorded runs? (executes nothing)",
+        description=(
+            "Compare OLD and NEW manifests: command, environment (Python, platform, packages), "
+            "Git state, inputs, outputs (numeric outputs with the OLD tolerance) and exit code. "
+            "Exit status 0 if there is no difference, 1 if there is. Nothing is executed."
+        ),
+    )
+    dif.add_argument("old", type=Path, help="the baseline manifest")
+    dif.add_argument("new", type=Path, help="the manifest to compare with it")
+    dif.add_argument("--json", action="store_true", help="same as --format json")
+    dif.add_argument("--format", choices=("text", "json", "markdown"), default=None)
+
+    lst = sub.add_parser(
+        "list",
+        help="list the manifests in a directory; with --check, verify all of them (no rerun)",
+        description=(
+            "List the *.sciproof.json files in DIRECTORY (default: the current directory), newest "
+            "first. With --check each one is verified for integrity (nothing is executed) and the "
+            "exit status is 0 if all PASS, 1 if any FAIL or is invalid, 2 if any is INCONCLUSIVE."
+        ),
+    )
+    lst.add_argument("directory", nargs="?", type=Path, default=Path("."))
+    lst.add_argument("-r", "--recursive", action="store_true", help="also look in subdirectories")
+    lst.add_argument("--check", action="store_true", help="verify every manifest (integrity only)")
+    lst.add_argument("--json", action="store_true", help="same as --format json")
+    lst.add_argument("--format", choices=("text", "json", "markdown"), default=None)
+
+    exp = sub.add_parser(
+        "export",
+        help="write a manifest in another format (in-toto Statement v1, OpenLineage events)",
+        description=(
+            "Write MANIFEST as an in-toto Statement v1 with a SciProof predicate. The Statement is "
+            "not signed and is not an attestation by itself; wrap it with your own tooling."
+        ),
+    )
+    exp.add_argument("manifest", type=Path)
+    exp.add_argument(
+        "--format",
+        choices=("in-toto", "openlineage"),
+        default="in-toto",
+        help="in-toto: an unsigned Statement v1 with hashes; openlineage: START and "
+        "COMPLETE/FAIL run events with the inputs and outputs (no hashes, no verdict)",
+    )
+    exp.add_argument(
+        "-o", "--output", type=Path, metavar="FILE", help="write here (default: stdout)"
+    )
 
     ins = sub.add_parser("inspect", help="show a readable summary; never executes anything")
     ins.add_argument("manifest", type=Path)
@@ -208,6 +315,9 @@ def _run_capture(args: argparse.Namespace) -> int:
         timeout=args.timeout,
         max_log_bytes=args.max_log_bytes,
         force=args.force,
+        claims=[(output, expression) for output, expression in args.claim],
+        note=args.note,
+        record_hardware=args.record_hardware,
     )
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
@@ -258,7 +368,60 @@ def _run_suggest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _report_format(args: argparse.Namespace) -> str:
+    """``--json`` is an alias of ``--format json``; asking for two different formats is an error."""
+    if args.json and args.format not in (None, "json"):
+        raise UsageError(f"--json conflicts with --format {args.format}")
+    return args.format or ("json" if args.json else "text")
+
+
+def _run_list(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)
+    entries = list_manifests(args.directory, recursive=args.recursive, check=args.check)
+    printer = {"json": format_json, "markdown": format_markdown}.get(output_format, format_text)
+    print(printer(entries, args.check))
+    if not args.check:
+        return EXIT_OK
+    return {"PASS": EXIT_OK, "FAIL": EXIT_FAIL, "INCONCLUSIVE": EXIT_INCONCLUSIVE}.get(
+        worst_verdict(entries) or "PASS", EXIT_OK
+    )
+
+
+def _run_export(args: argparse.Namespace) -> int:
+    printer = format_openlineage if args.format == "openlineage" else format_in_toto
+    text = printer(args.manifest)
+    if args.output is None:
+        print(text, end="")
+        return EXIT_OK
+    args.output.write_text(text, encoding="utf-8", newline="\n")
+    print(f"Wrote {args.output}")
+    return EXIT_OK
+
+
+def _run_sign(args: argparse.Namespace) -> int:
+    target = sign_manifest(args.manifest, args.key)
+    print(f"Signature written to {target.name}")
+    print(
+        "Note: a signature shows that the holder of the key vouched for this exact manifest. "
+        "Check it with 'sciproof verify MANIFEST --allowed-signers FILE'."
+    )
+    return EXIT_OK
+
+
+def _run_diff(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)
+    report = diff_manifests(args.old, args.new)
+    if output_format == "json":
+        print(format_diff_json(report))
+    elif output_format == "markdown":
+        print(report.to_markdown())
+    else:
+        print(report.to_text())
+    return EXIT_OK if report.identical else EXIT_FAIL
+
+
 def _run_verify(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)  # before anything runs
     report = verify(
         args.manifest,
         rerun=args.rerun,
@@ -268,8 +431,14 @@ def _run_verify(args: argparse.Namespace) -> int:
         confirm=_confirm if args.rerun and not args.yes else None,
         clean_env=args.clean_env,
         pass_env=args.pass_env,
+        allowed_signers=args.allowed_signers,
     )
-    print(format_report_json(report) if args.json else format_report(report))
+    if output_format == "json":
+        print(format_report_json(report))
+    elif output_format == "markdown":
+        print(report.to_markdown())
+    else:
+        print(format_report(report))
     return _STATUS_EXIT[report.status]
 
 
@@ -295,6 +464,14 @@ def main(argv: list[str] | None = None) -> int:
             return _run_capture(args)
         if args.command_name == "verify":
             return _run_verify(args)
+        if args.command_name == "diff":
+            return _run_diff(args)
+        if args.command_name == "list":
+            return _run_list(args)
+        if args.command_name == "export":
+            return _run_export(args)
+        if args.command_name == "sign":
+            return _run_sign(args)
         if args.command_name == "suggest-inputs":
             return _run_suggest(args)
         print(inspect_file(args.manifest))

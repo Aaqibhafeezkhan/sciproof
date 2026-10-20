@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sciproof.claims import claim_text
 from sciproof.manifest import load_manifest
 from sciproof.textutil import safe_text
 
@@ -62,6 +63,17 @@ def describe(manifest: dict[str, Any]) -> str:
     else:
         lines.append("  git:         not recorded")
 
+    hardware = env.get("hardware")
+    if hardware:
+        gpus = ", ".join(safe_text(g["name"], 60) for g in hardware["gpus"]) or (
+            "none found" if hardware["gpu_probe"] == "nvidia-smi" else "not probed (no nvidia-smi)"
+        )
+        processor = safe_text(hardware["processor"], 60)
+        lines.append(f"  hardware:    {hardware['cpu_count']} CPUs, {processor}; GPUs: {gpus}")
+    if manifest.get("note"):
+        lines += ["", "Note:"]
+        lines += [f"  {safe_text(line, 300)}" for line in manifest["note"].splitlines()[:10]]
+
     lines += ["", f"Inputs ({len(manifest['inputs'])}):"]
     lines += [
         f"  {safe_text(i['path'])}  {_kind(i)}sha256:{i['sha256'][:16]}...  {i['size']} bytes"
@@ -92,6 +104,11 @@ def describe(manifest: dict[str, Any]) -> str:
             lines.append(f"  {safe_text(item['path'])}  (absent when captured)  compare: {how}")
     if not manifest["outputs"]:
         lines.append("  (none)")
+
+    claims = manifest.get("claims") or []
+    if claims:
+        lines += ["", f"Claims ({len(claims)}), checked by verify:"]
+        lines += [f"  {safe_text(claim_text(c), 300)}" for c in claims]
 
     lines += [
         "",

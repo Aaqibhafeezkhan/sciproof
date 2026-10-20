@@ -7,11 +7,13 @@ equal exactly. Two NaNs compare equal; infinities must match in sign.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import json
 import math
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -114,7 +116,79 @@ def _load_npy(path: Path) -> list[Leaf]:
     return [("shape", list(array.shape)), ("dtype", str(array.dtype)), ("data", array)]
 
 
-def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> list[str]:
+@dataclass(frozen=True)
+class Difference:
+    """One difference between two files, with the numbers behind it when there are numbers.
+
+    ``message`` is the human-readable line that ``compare`` returns. The other fields are what a
+    table or a script needs: ``location``, the ``recorded`` and ``found`` values (JSON-safe),
+    and, for two numbers, the absolute and relative difference and the largest absolute
+    difference the tolerance would have allowed.
+    """
+
+    message: str
+    kind: str = "value"  # "number", "value", "structure" or "summary"
+    location: str | None = None
+    recorded: Any = None
+    found: Any = None
+    abs_diff: float | None = None
+    rel_diff: float | None = None
+    allowed: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "location": self.location,
+            "recorded": self.recorded,
+            "found": self.found,
+            "abs_diff": self.abs_diff,
+            "rel_diff": self.rel_diff,
+            "allowed": self.allowed,
+            "message": self.message,
+        }
+
+
+def _jsonable(value: Any) -> Any:
+    """A value as strict JSON can carry it: no NaN/Infinity literals, nothing huge."""
+    if hasattr(value, "item") and not isinstance(value, (str, bytes)):
+        try:
+            value = value.item()  # a NumPy scalar
+        except (ValueError, AttributeError):
+            return _short(value)
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "NaN"
+        if math.isinf(value):
+            return "Infinity" if value > 0 else "-Infinity"
+        return value
+    if isinstance(value, int):
+        return value if len(str(value)) <= 30 else _short(value)
+    if isinstance(value, str):
+        return value if len(value) <= 200 else f"{value[:200]}... ({len(value)} characters)"
+    return _short(value)
+
+
+def _number_details(
+    a: float, b: float, rtol: float, atol: float
+) -> tuple[float | None, float | None, float | None]:
+    """``(abs_diff, rel_diff, allowed)`` for two numbers; ``None`` where they are undefined."""
+    if not (math.isfinite(a) and math.isfinite(b)):
+        return None, None, None
+    biggest = max(abs(a), abs(b))
+    absolute = abs(a - b)
+    allowed = max(rtol * biggest, atol)
+    if not (math.isfinite(absolute) and math.isfinite(allowed)):
+        return None, None, None
+    if biggest > 0:
+        relative: float | None = absolute / biggest
+    else:
+        relative = 0.0 if absolute == 0 else None
+    return absolute, relative, allowed
+
+
+def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> list[Difference]:
     """Element-wise comparison of two equally shaped arrays with the scalar rule of ``compare``."""
     import numpy as np
 
@@ -131,16 +205,29 @@ def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> lis
     count = int(bad.sum())
     if not count:
         return []
-    messages = []
+    found: list[Difference] = []
     for index in np.argwhere(bad)[:MAX_REPORTED_DIFFERENCES]:
         key = tuple(int(i) for i in index)
-        messages.append(
-            f"data{list(key)}: recorded {expected[key]!r}, found {actual[key]!r} "
-            f"(rtol={rtol}, atol={atol})"
+        location = f"data{list(key)}"
+        recorded, seen = expected[key], actual[key]
+        absolute = relative = allowed = None
+        if expected.dtype.kind in "iuf" and actual.dtype.kind in "iuf":
+            absolute, relative, allowed = _number_details(float(recorded), float(seen), rtol, atol)
+        found.append(
+            Difference(
+                f"{location}: recorded {recorded!r}, found {seen!r} (rtol={rtol}, atol={atol})",
+                "number" if absolute is not None else "value",
+                location,
+                _jsonable(recorded),
+                _jsonable(seen),
+                absolute,
+                relative,
+                allowed,
+            )
         )
-    if count > len(messages):
-        messages.append(f"... {count} of {bad.size} values differ")
-    return messages
+    if count > len(found):
+        found.append(Difference(f"... {count} of {bad.size} values differ", "summary"))
+    return found
 
 
 def _is_exact_int(value: object) -> bool:
@@ -186,24 +273,31 @@ def _describe(location: str, headers: dict[int, str]) -> str:
     return location
 
 
-def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) -> list[str]:
-    """Return human-readable differences (empty list means equivalent within tolerance).
-
-    Locations are ``$.key[index]`` for JSON, ``rNcM`` (row, column; row 0 is the first line,
-    usually the header) for CSV, and ``data[i, j]`` for arrays.
-    """
-    differences: list[str] = []
+def compare_detailed(
+    expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float
+) -> list[Difference]:
+    """Like ``compare`` but returns ``Difference`` records (at most 10)."""
+    differences: list[Difference] = []
     headers = _csv_headers(expected)
 
-    def note(message: str) -> bool:
-        differences.append(message)
+    def note(difference: Difference) -> bool:
+        differences.append(difference)
         return len(differences) >= MAX_REPORTED_DIFFERENCES
 
     if len(expected) != len(actual):
-        note(f"structure differs: {len(expected)} values recorded, {len(actual)} found")
+        note(
+            Difference(
+                f"structure differs: {len(expected)} values recorded, {len(actual)} found",
+                "structure",
+            )
+        )
     for (loc_e, val_e), (loc_a, val_a) in zip(expected, actual, strict=False):
         if loc_e != loc_a:
-            note(f"structure differs at {loc_e}: found {loc_a} instead")
+            note(
+                Difference(
+                    f"structure differs at {loc_e}: found {loc_a} instead", "structure", loc_e
+                )
+            )
             break
         if loc_e == "data" and hasattr(val_e, "shape"):
             if (
@@ -211,13 +305,23 @@ def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) 
             ):  # same shape and dtype
                 differences.extend(_compare_arrays(val_e, val_a, rtol, atol))
             continue
+        absolute = relative = allowed = None
+        kind = "value"
         if _is_exact_int(val_e) and _is_exact_int(val_a):
             # Python ints are exact; going through float would hide differences above 2**53.
             different = val_e != val_a
             detail = ""
+            if different:
+                kind = "number"
+                with contextlib.suppress(OverflowError):
+                    absolute, relative, _ = _number_details(float(val_e), float(val_a), 0.0, 0.0)
+                allowed = 0.0 if absolute is not None else None  # integers are compared exactly
         elif _is_number(val_e) and _is_number(val_a):
+            kind = "number"
             try:
-                different = not _numbers_close(float(val_e), float(val_a), rtol, atol)  # type: ignore[arg-type]
+                a, b = float(val_e), float(val_a)  # type: ignore[arg-type]
+                different = not _numbers_close(a, b, rtol, atol)
+                absolute, relative, allowed = _number_details(a, b, rtol, atol)
             except OverflowError:  # an integer beyond the float range cannot match a float
                 different = True
             detail = f" (rtol={rtol}, atol={atol})"
@@ -225,8 +329,27 @@ def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) 
             # True == 1 in Python, but a boolean is not a number in the data
             different = type(val_e) is not type(val_a) or val_e != val_a
             detail = ""
-        if different and note(
-            f"{_describe(loc_e, headers)}: recorded {_short(val_e)}, found {_short(val_a)}{detail}"
-        ):
-            break
+        if different:
+            location = _describe(loc_e, headers)
+            record = Difference(
+                f"{location}: recorded {_short(val_e)}, found {_short(val_a)}{detail}",
+                kind,
+                location,
+                _jsonable(val_e),
+                _jsonable(val_a),
+                absolute,
+                relative,
+                allowed,
+            )
+            if note(record):
+                break
     return differences
+
+
+def compare(expected: list[Leaf], actual: list[Leaf], rtol: float, atol: float) -> list[str]:
+    """Return human-readable differences (empty list means equivalent within tolerance).
+
+    Locations are ``$.key[index]`` for JSON, ``rNcM`` (row, column; row 0 is the first line,
+    usually the header) for CSV, and ``data[i, j]`` for arrays.
+    """
+    return [d.message for d in compare_detailed(expected, actual, rtol, atol)]

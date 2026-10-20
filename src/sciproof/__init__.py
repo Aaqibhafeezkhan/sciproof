@@ -12,6 +12,7 @@ __version__ = "0.1.1"
 # The imports follow ``__version__`` on purpose: ``capture`` reads it while it is being imported.
 from sciproof.capture import CaptureResult  # noqa: E402
 from sciproof.capture import capture as capture_experiment  # noqa: E402
+from sciproof.diffmanifests import DiffReport, diff_manifests  # noqa: E402
 from sciproof.errors import (  # noqa: E402
     CaptureError,
     ConfirmationRequired,
@@ -19,7 +20,11 @@ from sciproof.errors import (  # noqa: E402
     SciProofError,
     UsageError,
 )
+from sciproof.export import to_in_toto as export_in_toto  # noqa: E402
+from sciproof.export import to_openlineage as export_openlineage  # noqa: E402
+from sciproof.ledger import list_manifests  # noqa: E402
 from sciproof.manifest import load_manifest  # noqa: E402
+from sciproof.signing import SignatureError, sign_manifest  # noqa: E402
 from sciproof.verify import Check, Report, Status, report_to_dict  # noqa: E402
 from sciproof.verify import verify as verify_manifest  # noqa: E402
 
@@ -28,14 +33,21 @@ __all__ = [
     "CaptureResult",
     "Check",
     "ConfirmationRequired",
+    "DiffReport",
     "ManifestError",
     "Report",
     "SciProofError",
+    "SignatureError",
     "Status",
     "UsageError",
     "__version__",
     "capture_experiment",
+    "diff_manifests",
+    "export_in_toto",
+    "export_openlineage",
+    "list_manifests",
     "load_manifest",
     "report_to_dict",
+    "sign_manifest",
     "verify_manifest",
 ]

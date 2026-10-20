@@ -55,6 +55,7 @@ this machine.
   "rerun_executed": false,
   "clean_env": false,
   "env_passed": [],
+  "signature": null,
   "checks": [
     {
       "status": "FAIL",
@@ -86,10 +87,28 @@ are added within `1.x`; a field is only removed or changed in a new major versio
 | --- | --- | --- |
 | `input_integrity`, `output_integrity`, `snapshot_integrity`, `rerun_output_exact` | digest comparisons | `path`, `expected_sha256`, `actual_sha256` (`null` when the file is absent) |
 | `exit_code` | rerun | `recorded`, `rerun` |
-| `rerun_output_numeric` | rerun of a `--output-numeric` file | `path`, `rtol`, `atol`, `rule`, `differences` (list, empty when equivalent; `null` when the file could not be compared), `error` |
+| `claim` | a claim in the manifest | `phase` (`recorded` or `rerun`), `output`, `location`, `op`, `value`, `rtol`/`atol` for `~=`, `found` (`null` if the location is absent), `present` |
+| `manifest_signature` | `--allowed-signers` | `namespace`, `signature_file`, `principal`, `key_type`, `fingerprint` (the last three are `null` unless the signature is good) |
+| `rerun_output_numeric` | rerun of a `--output-numeric` file | `path`, `rtol`, `atol`, `rule`, `differences` (list of messages, empty when equivalent; `null` when the file could not be compared), `difference_details`, `error` |
+
+`signature` is `null` unless `--allowed-signers` was given; then it holds `status` (`good`, `bad`,
+`missing` or `unavailable`) and the same fields as the signature evidence ([Signing](SIGNING.md)).
 
 `clean_env` is true when the rerun used `--clean-env`; `env_passed` then lists the *names*
 (never the values) of the environment variables the command received.
+
+Each entry of `difference_details` has `kind` (`number`, `value`, `structure` or `summary`),
+`location`, `recorded`, `found`, and for two numbers `abs_diff`, `rel_diff` (relative to the
+larger magnitude) and `allowed` (the largest absolute difference the tolerance would have
+accepted); they are `null` where undefined, and NaN or infinite values appear as the strings
+`"NaN"`, `"Infinity"`, `"-Infinity"` so that the document is strict JSON.
+
+## Markdown
+
+`sciproof verify --format markdown` (or `Report.to_markdown()`) prints the same report as
+GitHub-flavoured Markdown: the verdict and reason, a table of checks, a table of numeric
+differences, warnings, and what was not checked. Text that comes from a manifest is escaped.
+In GitHub Actions: `sciproof verify baseline.sciproof.json --format markdown >> "$GITHUB_STEP_SUMMARY"`.
 
 For a directory, the digest fields hold the tree digests and the evidence adds
 `artifact: "directory"`, `files_expected`, `files_actual` and `tree`, which has `added`,

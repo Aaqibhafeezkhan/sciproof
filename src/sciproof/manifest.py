@@ -14,6 +14,15 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sciproof.claims import (
+    MAX_CLAIMS,
+    OPS,
+    ORDER_OPS,
+    SUPPORTED_SUFFIXES,
+    is_number,
+    location_matches_file,
+)
+from sciproof.environment import MAX_GPUS
 from sciproof.errors import ManifestError, UnsafePathError
 from sciproof.jsonstrict import reject_duplicate_keys
 from sciproof.paths import validate_relative_path
@@ -26,6 +35,7 @@ SCHEMA_VERSION_DIRECTORIES = "1.1"
 SUPPORTED_MAJOR = 1
 MANIFEST_SUFFIX = ".sciproof.json"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_NOTE_LENGTH = 2000
 
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -116,6 +126,100 @@ def _check_kind(item: dict[str, Any], where: str, minor: int, present: bool) -> 
     return "directory"
 
 
+def _check_note(note: Any, minor: int) -> None:
+    """Validate the optional free-text ``note`` (schema 1.1)."""
+    if note is None:
+        return
+    if minor < 1:
+        raise _fail("note", "a note needs schema_version 1.1 or later")
+    if (
+        not isinstance(note, str)
+        or not note.strip()
+        or len(note) > MAX_NOTE_LENGTH
+        or "\x00" in note
+    ):
+        raise _fail("note", f"expected 1 to {MAX_NOTE_LENGTH} characters of text")
+
+
+def _check_hardware(hardware: Any, minor: int) -> None:
+    """Validate the optional ``environment.hardware`` record (schema 1.1)."""
+    if hardware is None:
+        return
+    where = "environment.hardware"
+    if minor < 1:
+        raise _fail(where, "hardware needs schema_version 1.1 or later")
+    hardware = _as_dict(hardware, where)
+    cpus = hardware.get("cpu_count")
+    if cpus is not None and (isinstance(cpus, bool) or not isinstance(cpus, int) or cpus < 1):
+        raise _fail(f"{where}.cpu_count", "expected a positive integer or null")
+    processor = hardware.get("processor")
+    if not isinstance(processor, str) or len(processor) > 200:
+        raise _fail(f"{where}.processor", "expected a string of at most 200 characters")
+    if hardware.get("gpu_probe") not in ("nvidia-smi", "none", "failed"):
+        raise _fail(f"{where}.gpu_probe", "expected 'nvidia-smi', 'none' or 'failed'")
+    gpus = hardware.get("gpus")
+    if not isinstance(gpus, list) or len(gpus) > MAX_GPUS:
+        raise _fail(f"{where}.gpus", f"expected a list of at most {MAX_GPUS} GPUs")
+    for index, gpu in enumerate(gpus):
+        gpu = _as_dict(gpu, f"{where}.gpus[{index}]")
+        for key, limit in (("name", 100), ("driver", 40)):
+            value = gpu.get(key)
+            if not isinstance(value, str) or len(value) > limit:
+                raise _fail(f"{where}.gpus[{index}].{key}", f"expected a string of at most {limit}")
+        memory = gpu.get("memory_mib")
+        if memory is not None and (
+            isinstance(memory, bool) or not isinstance(memory, int) or memory < 0
+        ):
+            raise _fail(
+                f"{where}.gpus[{index}].memory_mib", "expected a non-negative integer or null"
+            )
+
+
+def _finite_number(value: Any) -> bool:
+    return is_number(value) and math.isfinite(value)
+
+
+def _check_claims(claims: Any, minor: int, outputs: dict[str, tuple[str, bool]]) -> None:
+    """Validate the optional ``claims`` list (schema 1.1): see ``sciproof.claims``."""
+    if claims is None:
+        return
+    if minor < 1:
+        raise _fail("claims", "claims need schema_version 1.1 or later")
+    if not isinstance(claims, list):
+        raise _fail("claims", f"expected a list, got {type(claims).__name__}")
+    if len(claims) > MAX_CLAIMS:
+        raise _fail("claims", f"more than {MAX_CLAIMS} claims")
+    for index, claim in enumerate(claims):
+        where = f"claims[{index}]"
+        claim = _as_dict(claim, where)
+        output = _rel_path(claim.get("output"), f"{where}.output")
+        kind, present = outputs.get(output, (None, False))
+        if kind != "file" or not present or not output.lower().endswith(SUPPORTED_SUFFIXES):
+            raise _fail(
+                f"{where}.output",
+                f"{output!r} must be a declared .json or .csv output file that was present",
+            )
+        location = claim.get("location")
+        if not isinstance(location, str) or not location_matches_file(location, output):
+            raise _fail(f"{where}.location", f"{location!r} is not a location in {output!r}")
+        op = claim.get("op")
+        if op not in OPS:
+            raise _fail(f"{where}.op", f"expected one of {list(OPS)}, got {op!r}")
+        value = claim.get("value")
+        if op in ORDER_OPS or op == "~=":
+            if not _finite_number(value):
+                raise _fail(f"{where}.value", f"{op} needs a finite number")
+        elif not (value is None or isinstance(value, (bool, str)) or _finite_number(value)) or (
+            isinstance(value, str) and len(value) > 1000
+        ):
+            raise _fail(f"{where}.value", "expected a number, string, boolean or null")
+        if op == "~=":
+            _finite_nonneg(claim.get("rtol"), f"{where}.rtol")
+            _finite_nonneg(claim.get("atol"), f"{where}.atol")
+        elif "rtol" in claim or "atol" in claim:
+            raise _fail(where, "rtol and atol only apply to '~='")
+
+
 def check_nesting(declared: list[tuple[str, str]]) -> None:
     """A declared path must not lie inside another declared directory."""
     directories = [path for path, kind in declared if kind == "directory"]
@@ -181,6 +285,8 @@ def validate_manifest(data: Any) -> dict[str, Any]:
     _get(python, "version", str, "environment.python")
     _get(environment, "platform", dict, "environment")
     _get(environment, "env_vars", dict, "environment")
+    _check_hardware(environment.get("hardware"), minor)
+    _check_note(manifest.get("note"), minor)
 
     dependencies = _get(manifest, "dependencies", list, "manifest")
     for index, dep in enumerate(dependencies):
@@ -214,6 +320,7 @@ def validate_manifest(data: Any) -> dict[str, Any]:
     _validate_stream(execution.get("stderr"), "execution.stderr")
 
     seen_outputs: set[str] = set()
+    output_info: dict[str, tuple[str, bool]] = {}
     for index, item in enumerate(_get(manifest, "outputs", list, "manifest")):
         where = f"outputs[{index}]"
         item = _as_dict(item, where)
@@ -243,7 +350,9 @@ def validate_manifest(data: Any) -> dict[str, Any]:
         if kind == "directory" and mode != "exact":
             raise _fail(f"{where}.compare.mode", "a directory can only be compared exactly")
         declared.append((path, kind))
+        output_info[path] = (kind, present)
 
+    _check_claims(manifest.get("claims"), minor, output_info)
     check_nesting(declared)
     return manifest
 

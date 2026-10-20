@@ -370,3 +370,53 @@ def test_rerun_with_a_huge_json_integer_gives_a_verdict_not_a_traceback(project)
     )
     report = verify(project.manifest, rerun=True, assume_yes=True)
     assert report.status is Status.PASS
+
+
+# ---------------------------------------------------------------- a rerun starts clean
+
+
+def test_a_stale_output_cannot_make_a_rerun_that_wrote_nothing_pass(project):
+    """The old file must not 'reproduce' a result the command never wrote."""
+    project.capture()
+    data = json.loads(project.manifest.read_text())
+    data["command"]["argv"] = [sys.executable, "-c", "pass"]  # writes nothing at all
+    project.manifest.write_text(json.dumps(data))
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    assert report.status is Status.FAIL
+    messages = {c.subject: c.message for c in report.checks}
+    assert messages["rerun output out/exact.txt"] == "the rerun did not produce this file"
+    assert messages["rerun output out/result.json"] == "the rerun did not produce this file"
+
+
+def test_the_recorded_outputs_are_restored_after_a_rerun_that_wrote_nothing(project):
+    project.capture()
+    before = {p: (project.root / p).read_bytes() for p in ("out/exact.txt", "out/result.json")}
+    data = json.loads(project.manifest.read_text())
+    data["command"]["argv"] = [sys.executable, "-c", "pass"]
+    project.manifest.write_text(json.dumps(data))
+    verify(project.manifest, rerun=True, assume_yes=True)
+    assert {p: (project.root / p).read_bytes() for p in before} == before
+
+
+def test_the_command_really_runs_without_its_old_outputs(project):
+    """A command that looks for its own previous output sees none, as in a first run."""
+    project.capture()
+    code = "import pathlib, sys; sys.exit(7 if pathlib.Path('out/exact.txt').exists() else 0)"
+    data = json.loads(project.manifest.read_text())
+    data["command"]["argv"] = [sys.executable, "-c", code]
+    data["execution"]["exit_code"] = 0
+    project.manifest.write_text(json.dumps(data))
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    exit_check = next(c for c in report.checks if c.subject == "exit code")
+    assert exit_check.status is Status.PASS  # exit 0: the file was not there
+
+
+def test_a_rerun_that_cannot_start_leaves_the_outputs_in_place(project):
+    project.capture()
+    before = (project.root / "out" / "exact.txt").read_bytes()
+    data = json.loads(project.manifest.read_text())
+    data["command"]["argv"] = ["this-program-does-not-exist-sciproof"]
+    project.manifest.write_text(json.dumps(data))
+    report = verify(project.manifest, rerun=True, assume_yes=True)
+    assert report.status is Status.INCONCLUSIVE
+    assert (project.root / "out" / "exact.txt").read_bytes() == before
