@@ -28,6 +28,7 @@ from typing import Any
 from sciproof.claims import MISSING, claim_text, evaluate, json_safe
 from sciproof.environment import (
     clean_environment,
+    hardware_info,
     interpreter_info,
     platform_info,
     selected_env_vars,
@@ -486,7 +487,29 @@ def _compare_environment(base: Path, manifest: dict[str, Any]) -> list[str]:
             differences.append(f"environment variable {name} is set now, was not at capture time")
         elif now_vars[name] != recorded_vars[name]:
             differences.append(f"environment variable {name} differs from the recorded value")
+    differences.extend(_compare_hardware(recorded_env.get("hardware")))
     return differences
+
+
+def _compare_hardware(recorded: dict[str, Any] | None) -> list[str]:
+    """Differences between the recorded hardware and this machine (only if it was recorded)."""
+    if recorded is None:
+        return []
+    now = hardware_info()
+    differences = []
+    if now["cpu_count"] != recorded["cpu_count"]:
+        differences.append(f"CPU count: {recorded['cpu_count']} was used, now {now['cpu_count']}")
+    old_gpus = [(g["name"], g["driver"]) for g in recorded["gpus"]]
+    new_gpus = [(g["name"], g["driver"]) for g in now["gpus"]]
+    if old_gpus != new_gpus and (
+        recorded["gpu_probe"] == now["gpu_probe"] == "nvidia-smi" or old_gpus or new_gpus
+    ):
+        differences.append(f"GPUs: {_gpu_text(old_gpus)} were used, now {_gpu_text(new_gpus)}")
+    return differences
+
+
+def _gpu_text(gpus: list[tuple[str, str]]) -> str:
+    return ", ".join(f"{name} (driver {driver})" for name, driver in gpus) or "none"
 
 
 # --------------------------------------------------------------------------------------------

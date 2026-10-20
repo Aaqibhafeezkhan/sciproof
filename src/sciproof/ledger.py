@@ -37,6 +37,7 @@ class Entry:
     inputs: int = 0
     outputs: int = 0
     claims: int = 0
+    note: str | None = None
     signed: bool = False
     verdict: str | None = None  # PASS, FAIL or INCONCLUSIVE, only with check=True
     error: str | None = None  # why the manifest could not be read
@@ -91,6 +92,7 @@ def list_manifests(
         entry.inputs = len(manifest["inputs"])
         entry.outputs = len(manifest["outputs"])
         entry.claims = len(manifest.get("claims") or [])
+        entry.note = manifest.get("note")
         entry.signed = signature_path(path).is_file()
         if check:
             try:
@@ -142,6 +144,7 @@ def format_text(entries: list[Entry], checked: bool) -> str:
             f"  {safe_text(e.file)}  captured {safe_text(e.created_at or '')}  exit {e.exit_code}"
             f"  in {e.inputs}  out {e.outputs}  claims {e.claims}"
             f"{'  signed' if e.signed else ''}{state}{verdict}"
+            f"{('  note: ' + safe_text(e.note, 40)) if e.note else ''}"
         )
     return "\n".join([*lines, "", f"summary: {summary(entries, checked)}"])
 

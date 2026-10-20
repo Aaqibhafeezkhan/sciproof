@@ -17,7 +17,8 @@ output, not proof of the cause. The report says so.
 | Section | Compared |
 | --- | --- |
 | `command` | the exact argument vector |
-| `environment` | Python version and implementation; platform system, machine and release; the recorded environment variables; every installed package (added, removed, version changed; names are matched case-insensitively) |
+| `environment` | Python version and implementation; platform system, machine and release; the hardware record (CPU count, processor, GPUs) if both manifests have one; the recorded environment variables; every installed package (added, removed, version changed; names are matched case-insensitively) |
+| `note` | the free-text note (added, removed or changed) |
 | `git` | the commit and whether the working tree had uncommitted changes |
 | `inputs` | declared files and directories: added, removed, content changed; for a directory, which files were added, removed or modified |
 | `outputs` | the same, plus whether the output was present and how it is compared; numeric outputs are compared **numerically** (below) |

@@ -1,10 +1,15 @@
-"""Export a manifest as an in-toto Statement (v1), so that other tools can consume the evidence.
+"""Export a manifest for other tools: an in-toto Statement (v1) or OpenLineage run events.
 
 The Statement lists the output files as subjects with their SHA-256 and describes the run in a
 SciProof-specific predicate. It is **not signed and not an attestation by itself**: in-toto
 Statements are normally wrapped in a signed envelope (DSSE) by the tool that attests them, and
 that step is deliberately left to such tools. The predicate type is SciProof's own; it does not
 claim to be SLSA provenance, because SciProof records an experiment, not a build.
+
+The OpenLineage export describes the run as a pair of run events (START and COMPLETE or FAIL)
+with the inputs and outputs as datasets. It carries lineage (what was read and written, and
+whether the command succeeded) but not hashes or a verdict, because no standard facet for
+those was verified; use the in-toto export or the manifest for that.
 
 Nothing is executed and only the manifest is read.
 """
@@ -13,6 +18,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +29,11 @@ from sciproof.manifest import load_manifest
 
 STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
 PREDICATE_TYPE = "https://hayagrivai-labs.github.io/sciproof/docs/export/#experiment-v1"
+# The schema URL as shown in the OpenLineage specification's own RunEvent example.
+OPENLINEAGE_SCHEMA_URL = "https://openlineage.io/spec/1-0-0/OpenLineage.json#/definitions/RunEvent"
+OPENLINEAGE_PRODUCER = "https://github.com/hayagrivai-labs/sciproof"
+OPENLINEAGE_JOB_NAMESPACE = "sciproof"
+OPENLINEAGE_DATASET_NAMESPACE = "sciproof-files"
 
 
 def _subjects(items: list[dict[str, Any]], *, only_present: bool) -> list[dict[str, Any]]:
@@ -72,8 +84,10 @@ def to_in_toto(manifest_path: Path | str) -> dict[str, Any]:
                 {"name": d["name"], "version": d["version"]} for d in manifest["dependencies"]
             ],
             "recordedBy": environment.get("source"),
+            "hardware": environment.get("hardware"),
         },
         "git": git,
+        "note": manifest.get("note"),
         "outputs": [
             {
                 "name": o["path"],
@@ -94,6 +108,51 @@ def to_in_toto(manifest_path: Path | str) -> dict[str, Any]:
         "predicateType": PREDICATE_TYPE,
         "predicate": predicate,
     }
+
+
+def to_openlineage(manifest_path: Path | str) -> list[dict[str, Any]]:
+    """The run as two OpenLineage run events: START, then COMPLETE (exit code 0) or FAIL.
+
+    The run id is a UUID derived from the SHA-256 of the manifest, so exporting the same manifest
+    again gives the same events. The start time is the capture time minus the recorded duration
+    (derived, not measured separately). Datasets are named by their path relative to the
+    manifest's directory, in the namespace ``sciproof-files``; a directory is one dataset.
+    """
+    manifest_path = Path(manifest_path).resolve()
+    manifest = load_manifest(manifest_path)
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"sciproof:manifest:{digest}"))
+    ended = datetime.fromisoformat(manifest["created_at"])
+    started = ended - timedelta(seconds=manifest["execution"]["duration_seconds"])
+
+    def datasets(items: list[dict[str, Any]], *, only_present: bool) -> list[dict[str, str]]:
+        return [
+            {"namespace": OPENLINEAGE_DATASET_NAMESPACE, "name": item["path"]}
+            for item in items
+            if not only_present or item.get("present", True)
+        ]
+
+    inputs = datasets(manifest["inputs"], only_present=False)
+    outputs = datasets(manifest["outputs"], only_present=True)
+    succeeded = manifest["execution"]["exit_code"] == 0
+
+    def event(event_type: str, when: datetime) -> dict[str, Any]:
+        return {
+            "eventType": event_type,
+            "eventTime": when.isoformat(),
+            "run": {"runId": run_id},
+            "job": {"namespace": OPENLINEAGE_JOB_NAMESPACE, "name": manifest["name"]},
+            "inputs": inputs,
+            "outputs": outputs,
+            "producer": OPENLINEAGE_PRODUCER,
+            "schemaURL": OPENLINEAGE_SCHEMA_URL,
+        }
+
+    return [event("START", started), event("COMPLETE" if succeeded else "FAIL", ended)]
+
+
+def format_openlineage(manifest_path: Path | str) -> str:
+    return json.dumps(to_openlineage(manifest_path), indent=2, allow_nan=False) + "\n"
 
 
 def format_in_toto(manifest_path: Path | str) -> str:

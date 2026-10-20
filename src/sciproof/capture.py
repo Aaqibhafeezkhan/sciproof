@@ -12,7 +12,12 @@ from typing import Any
 
 from sciproof import __version__
 from sciproof.claims import claim_text, evaluate, parse_claim
-from sciproof.environment import interpreter_info, platform_info, selected_env_vars
+from sciproof.environment import (
+    hardware_info,
+    interpreter_info,
+    platform_info,
+    selected_env_vars,
+)
 from sciproof.errors import CaptureError, ManifestError, SciProofError, UnsafePathError
 from sciproof.gitinfo import git_info
 from sciproof.hashing import sha256_file
@@ -38,6 +43,7 @@ from sciproof.runner import (
 from sciproof.treehash import FileEntry, TreeError, scan_tree, tree_digest, tree_record
 
 DEFAULT_MAX_LOG_BYTES = 64 * 1024
+MAX_NOTE_LENGTH = 2000
 DEFAULT_RTOL = 1e-9
 DEFAULT_ATOL = 0.0
 
@@ -172,6 +178,8 @@ def capture(
     max_log_bytes: int = DEFAULT_MAX_LOG_BYTES,
     force: bool = False,
     claims: list[tuple[str, str]] | None = None,
+    note: str | None = None,
+    record_hardware: bool = False,
 ) -> CaptureResult:
     """Run ``argv`` once in ``base`` and write ``<name>.sciproof.json`` there.
 
@@ -203,6 +211,10 @@ def capture(
     _unique(exact_paths + numeric_paths, "--output/--output-numeric")
     _refuse_evidence_paths(input_paths + exact_paths + numeric_paths, name)
     claim_records = _parse_claims(base, claims or [], exact_paths + numeric_paths)
+    if note is not None and (not note.strip() or len(note) > MAX_NOTE_LENGTH or "\x00" in note):
+        raise CaptureError(
+            f"the note must be 1 to {MAX_NOTE_LENGTH} characters of text (no NUL bytes)"
+        )
     overlap = set(input_paths) & set(exact_paths + numeric_paths)
     if overlap:
         raise CaptureError(f"a file cannot be both input and output: {sorted(overlap)[0]}")
@@ -343,7 +355,9 @@ def capture(
         manifest: dict[str, Any] = {
             "schema": SCHEMA,
             "schema_version": (
-                SCHEMA_VERSION_DIRECTORIES if has_directory or claim_records else SCHEMA_VERSION
+                SCHEMA_VERSION_DIRECTORIES
+                if has_directory or claim_records or note or record_hardware
+                else SCHEMA_VERSION
             ),
             "name": name,
             "created_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
@@ -358,6 +372,7 @@ def capture(
                 },
                 "platform": platform_info(),
                 "env_vars": selected_env_vars(),
+                **({"hardware": hardware_info()} if record_hardware else {}),
             },
             "dependencies": [
                 {"name": pkg_name, "version": pkg_version}
@@ -375,6 +390,8 @@ def capture(
         }
         if claim_records:
             manifest["claims"] = claim_records
+        if note:
+            manifest["note"] = note
         try:
             write_manifest(manifest_path, manifest)
         except OSError as exc:

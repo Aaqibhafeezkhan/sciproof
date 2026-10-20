@@ -149,7 +149,8 @@ A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/T
 ```text
 sciproof capture --name NAME [--input P]... [--output P]... [--output-numeric P]...
                  [--rtol X] [--atol Y] [--timeout S] [--max-log-bytes N]
-                 [--claim OUTPUT 'LOCATION OP VALUE']... [--force] [--allow-nonzero]
+                 [--claim OUTPUT 'LOCATION OP VALUE']... [--note TEXT] [--record-hardware]
+                 [--force] [--allow-nonzero]
                  -- COMMAND [ARGS...]
 sciproof verify  MANIFEST [--rerun] [--yes] [--strict-env] [--clean-env]
                  [--allowed-signers FILE]
@@ -158,7 +159,7 @@ sciproof inspect MANIFEST
 sciproof diff    OLD NEW [--format text|json|markdown]
 sciproof sign    MANIFEST --key KEY
 sciproof list    [DIR] [-r] [--check] [--format text|json|markdown]
-sciproof export  MANIFEST [-o FILE]
+sciproof export  MANIFEST [--format in-toto|openlineage] [-o FILE]
 sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
 ```
 
@@ -195,12 +196,15 @@ sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
   `.csv` output (`'$.accuracy >= 0.9'`, `'$.loss ~= 0.25 atol=0.01'`) that `verify` checks on the
   recorded output and on every rerun. It shows that the value satisfies the comparison, nothing
   more ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/CLAIMS.md)).
+* `--note TEXT` stores free text with the run (why it was made); `--record-hardware` also records
+  the CPU count, processor and NVIDIA GPUs (no host name, user name or serial numbers), and a
+  rerun on different hardware says so.
 * `sign` and `verify --allowed-signers FILE` sign a manifest and check the signature with
   OpenSSH (`ssh-keygen -Y`); SciProof implements no cryptography and trusts only the file you
   name ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/SIGNING.md)).
 * `list` shows the manifests in a directory, newest first; `list --check` verifies all of them
   (integrity only) and exits with the worst result. `export` writes a manifest as an unsigned
-  in-toto Statement ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/LIST_AND_EXPORT.md)).
+  in-toto Statement or as OpenLineage run events ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/LIST_AND_EXPORT.md)).
 * `--clean-env` gives a rerun only a minimal environment (`PATH`, temp directories and the
   numerics-related variables SciProof records) instead of all of yours, so a manifest from
   someone else cannot read your credentials from it. `--pass-env NAME` adds a variable. It

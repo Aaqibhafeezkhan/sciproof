@@ -51,6 +51,26 @@ normally wrapped in a signed envelope (DSSE) by the tool that attests them; that
 such a tool, and `sciproof sign` signs the manifest itself. The Statement keeps the hashes but not
 the verdict: run `sciproof verify` on the manifest for that.
 
+```bash
+sciproof export baseline.sciproof.json --format openlineage
+```
+
+writes the run as two [OpenLineage](https://openlineage.io/) run events, `START` and then
+`COMPLETE` (or `FAIL` if the recorded command failed), as a JSON array:
+
+* `run.runId` is a UUID (version 5) derived from the SHA-256 of the manifest, so exporting the
+  same manifest again gives the same run; `eventTime` of the end is the capture time and the start
+  is that minus the recorded duration (derived, not measured separately).
+* `job` is `{namespace: "sciproof", name: <experiment name>}`.
+* `inputs` and `outputs` are datasets in the namespace `sciproof-files`, named by their path
+  relative to the manifest's directory; a directory is one dataset, and outputs that were absent
+  are left out.
+* `schemaURL` is the one shown in the OpenLineage specification's own run event example.
+
+This is **lineage only**: which files were read and written, and whether the command succeeded. It
+carries no hashes and no verdict, because no standard facet for them was verified; use the in-toto
+export or the manifest for that.
+
 An export to RO-Crate (Process Run Crate) is not implemented; see the
 [design note](DESIGN_RO_CRATE.md) for the open questions.
 
@@ -62,4 +82,5 @@ import sciproof
 for entry in sciproof.list_manifests("results", recursive=True, check=True):
     print(entry.file, entry.verdict)
 statement = sciproof.export_in_toto("baseline.sciproof.json")  # a dict
+events = sciproof.export_openlineage("baseline.sciproof.json")  # a list of two dicts
 ```

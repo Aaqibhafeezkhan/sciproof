@@ -18,7 +18,7 @@ from sciproof import __version__
 from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, capture
 from sciproof.diffmanifests import diff_manifests, format_diff_json
 from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
-from sciproof.export import format_in_toto
+from sciproof.export import format_in_toto, format_openlineage
 from sciproof.inspect_manifest import inspect_file
 from sciproof.ledger import (
     format_json,
@@ -122,6 +122,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="record a checkable claim about a value in a declared .json/.csv output, for example "
         "--claim out/metrics.json '$.accuracy >= 0.9' (operators: == != < <= > >= and "
         "'~=' with rtol=/atol=); verify checks it; repeatable",
+    )
+    cap.add_argument(
+        "--note",
+        metavar="TEXT",
+        help="free text stored in the manifest (why this run was made, what to look for; "
+        "at most 2000 characters, never interpreted)",
+    )
+    cap.add_argument(
+        "--record-hardware",
+        action="store_true",
+        help="also record the CPU count, processor and NVIDIA GPUs (via nvidia-smi); no host "
+        "name, user name or serial numbers; a rerun then reports differences",
     )
     cap.add_argument("--force", action="store_true", help="overwrite an existing manifest")
     cap.add_argument(
@@ -249,14 +261,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     exp = sub.add_parser(
         "export",
-        help="write a manifest in another format (in-toto Statement v1) for other tools",
+        help="write a manifest in another format (in-toto Statement v1, OpenLineage events)",
         description=(
             "Write MANIFEST as an in-toto Statement v1 with a SciProof predicate. The Statement is "
             "not signed and is not an attestation by itself; wrap it with your own tooling."
         ),
     )
     exp.add_argument("manifest", type=Path)
-    exp.add_argument("--format", choices=("in-toto",), default="in-toto")
+    exp.add_argument(
+        "--format",
+        choices=("in-toto", "openlineage"),
+        default="in-toto",
+        help="in-toto: an unsigned Statement v1 with hashes; openlineage: START and "
+        "COMPLETE/FAIL run events with the inputs and outputs (no hashes, no verdict)",
+    )
     exp.add_argument(
         "-o", "--output", type=Path, metavar="FILE", help="write here (default: stdout)"
     )
@@ -298,6 +316,8 @@ def _run_capture(args: argparse.Namespace) -> int:
         max_log_bytes=args.max_log_bytes,
         force=args.force,
         claims=[(output, expression) for output, expression in args.claim],
+        note=args.note,
+        record_hardware=args.record_hardware,
     )
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
@@ -368,7 +388,8 @@ def _run_list(args: argparse.Namespace) -> int:
 
 
 def _run_export(args: argparse.Namespace) -> int:
-    text = format_in_toto(args.manifest)
+    printer = format_openlineage if args.format == "openlineage" else format_in_toto
+    text = printer(args.manifest)
     if args.output is None:
         print(text, end="")
         return EXIT_OK

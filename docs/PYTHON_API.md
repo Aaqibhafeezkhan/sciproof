@@ -27,7 +27,7 @@ A complete, runnable version is `examples/api_usage.py`.
 
 ## Functions
 
-### `capture_experiment(*, name, argv, base, inputs=None, outputs=None, numeric_outputs=None, rtol=1e-9, atol=0.0, timeout=None, max_log_bytes=..., force=False, claims=None) -> CaptureResult`
+### `capture_experiment(*, name, argv, base, inputs=None, outputs=None, numeric_outputs=None, rtol=1e-9, atol=0.0, timeout=None, max_log_bytes=..., force=False, claims=None, note=None, record_hardware=False) -> CaptureResult`
 
 Runs `argv` once in `base` (no shell) and writes `<name>.sciproof.json` there. The arguments
 mean what the `sciproof capture` options mean; paths are relative to `base`. A command that exits
@@ -64,7 +64,8 @@ report, and `report.signature` holds its outcome ([Signing](SIGNING.md)).
 ### `list_manifests(directory, *, recursive=False, check=False) -> list[Entry]`
 
 The manifests in a directory, newest first, optionally verified (integrity only);
-`export_in_toto(manifest_path) -> dict` returns the manifest as an in-toto Statement
+`export_in_toto(manifest_path) -> dict` returns the manifest as an in-toto Statement and
+`export_openlineage(manifest_path) -> list[dict]` as OpenLineage run events
 ([Listing and exporting](LIST_AND_EXPORT.md)).
 
 ### `load_manifest(path) -> dict`

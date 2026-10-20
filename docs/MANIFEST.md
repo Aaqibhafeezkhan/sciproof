@@ -85,6 +85,23 @@ Every field of a manifest. Array entries are written as `[]`.
 | `outputs[].compare.atol` | Absolute tolerance of a numeric output. |
 | `outputs[].compare.snapshot` | Path and SHA-256 of the copy of the output in `NAME.sciproof.d/`, which is compared with the rerun. |
 
+## Note and hardware
+
+Two optional fields, both schema 1.1:
+
+* `note`: free text given with `capture --note` (1 to 2000 characters, no NUL). It is for people:
+  why the run was made, what to look at. It is never interpreted, and it is escaped when shown.
+* `environment.hardware`, from `capture --record-hardware`:
+
+```jsonc
+"hardware": {"cpu_count": 12, "processor": "Intel64 Family 6 ...", "gpu_probe": "nvidia-smi",
+             "gpus": [{"name": "NVIDIA RTX 4090", "driver": "550.54.14", "memory_mib": 24564}]}
+```
+
+  `gpu_probe` is `nvidia-smi` (the tool was found; an empty `gpus` list then means no NVIDIA GPU),
+  `none` (it is not installed, so nothing is known about GPUs) or `failed`. At most 16 GPUs.
+  The host name, user name, serial numbers and GPU UUIDs are never recorded.
+
 ## Claims
 
 Since schema 1.1 a manifest may have a `claims` list (at most 100); see [Claims](CLAIMS.md):

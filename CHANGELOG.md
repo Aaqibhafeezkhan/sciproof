@@ -8,6 +8,13 @@ All notable changes are listed here. The format follows
 
 ### Added
 
+* `capture --note TEXT`: free text stored with the run; shown by `inspect`, `list` and `diff`.
+* `capture --record-hardware`: opt-in record of the CPU count, processor and NVIDIA GPUs (via
+  `nvidia-smi`); a rerun on different hardware reports the difference (a warning, or
+  `INCONCLUSIVE` with `--strict-env`), and `diff` compares it. No host name, user name or
+  serial numbers are recorded. Manifest schema 1.1.
+* `export --format openlineage`: the run as OpenLineage START and COMPLETE/FAIL events
+  (lineage only: no hashes or verdict).
 * `sciproof sign MANIFEST --key KEY` and `verify --allowed-signers FILE`: sign a manifest and
   check the signature with OpenSSH (`ssh-keygen -Y`). SciProof implements no cryptography and
   trusts only the allowed-signers file you name; a missing signature is `INCONCLUSIVE`, a wrong

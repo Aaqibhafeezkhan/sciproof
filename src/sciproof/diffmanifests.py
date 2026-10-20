@@ -27,7 +27,7 @@ from sciproof.treehash import diff_trees
 
 DIFF_SCHEMA = "sciproof.diff"
 DIFF_SCHEMA_VERSION = "1.0"
-SECTIONS = ("command", "environment", "git", "inputs", "outputs", "claims", "execution")
+SECTIONS = ("command", "note", "environment", "git", "inputs", "outputs", "claims", "execution")
 SYMBOL = {"added": "+", "removed": "-", "changed": "~"}
 MAX_LINES_PER_SECTION = 20
 
@@ -198,6 +198,33 @@ def _diff_command(old: dict[str, Any], new: dict[str, Any], report: DiffReport) 
         report.add("command", "changed", "argv", _versions(_command_line(old), _command_line(new)))
 
 
+def _diff_note(old: dict[str, Any], new: dict[str, Any], report: DiffReport) -> None:
+    a, b = old.get("note"), new.get("note")
+    if a == b:
+        return
+    if a is None:
+        report.add("note", "added", "note", _text(b, 300))
+    elif b is None:
+        report.add("note", "removed", "note", f"was {_text(a, 300)!r}")
+    else:
+        report.add("note", "changed", "note", _versions(_text(a, 150), _text(b, 150)))
+
+
+def _diff_hardware(old: dict[str, Any], new: dict[str, Any], report: DiffReport) -> None:
+    a, b = old["environment"].get("hardware"), new["environment"].get("hardware")
+    if a is None and b is None:
+        return
+    if a is None or b is None:
+        report.notes.append("hardware was recorded in one manifest only, so it was not compared")
+        return
+    for key, label in (("cpu_count", "CPU count"), ("processor", "processor")):
+        if a[key] != b[key]:
+            report.add("environment", "changed", label, _versions(a[key], b[key]))
+    gpus = lambda h: ", ".join(f"{g['name']} ({g['driver']})" for g in h["gpus"]) or "none"  # noqa: E731
+    if gpus(a) != gpus(b):
+        report.add("environment", "changed", "GPUs", _versions(gpus(a), gpus(b)))
+
+
 def _diff_environment(old: dict[str, Any], new: dict[str, Any], report: DiffReport) -> None:
     a, b = old["environment"], new["environment"]
     for key in ("version", "implementation"):
@@ -232,6 +259,7 @@ def _diff_environment(old: dict[str, Any], new: dict[str, Any], report: DiffRepo
                 f"variable {name}",
                 _versions(a["env_vars"][name], b["env_vars"][name]),
             )
+    _diff_hardware(old, new, report)
     if a.get("source") != b.get("source"):
         report.notes.append(
             "the two manifests describe the environment differently "
@@ -409,6 +437,7 @@ def diff_manifests(old_path: Path | str, new_path: Path | str) -> DiffReport:
     new = load_manifest(new_file)
     report = DiffReport(old["name"], new["name"], old_file.name, new_file.name)
     _diff_command(old, new, report)
+    _diff_note(old, new, report)
     _diff_environment(old, new, report)
     _diff_git(old, new, report)
     _diff_artifacts("inputs", old, new, old_file.parent, new_file.parent, report)
