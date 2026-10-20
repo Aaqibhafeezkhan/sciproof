@@ -121,8 +121,10 @@ jobs:
             --exclude 'api\.github\.com'
             --exclude '^https://github\.com/hayagrivai-labs/sciproof/(edit|issues/new)'
             --format markdown
-            --output lychee-report.md
             'dist/**/*.html'
+          # The report path is an input of the action, not an argument: the action refuses a run
+          # in which --output appears in args as well (which made every scheduled run fail).
+          output: lychee-report.md
           fail: false
           jobSummary: true
       - name: Open, update or close the "broken links" issue
