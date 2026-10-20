@@ -6,6 +6,12 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
+Manifest schema 1.1 is written only when a manifest uses directories, claims, a note or a hardware
+record; every other manifest is still 1.0 and is read by 0.1.x. Read **Fixed** first: it changes
+what a rerun reports.
+
 ### Added
 
 * `capture --note TEXT`: free text stored with the run; shown by `inspect`, `list` and `diff`.
