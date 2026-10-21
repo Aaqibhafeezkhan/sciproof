@@ -20,6 +20,7 @@ from sciproof.diffmanifests import diff_manifests, format_diff_json
 from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
 from sciproof.export import format_in_toto, format_openlineage
 from sciproof.inspect_manifest import inspect_file
+from sciproof.junit import list_junit, report_junit
 from sciproof.ledger import (
     format_json,
     format_markdown,
@@ -27,9 +28,12 @@ from sciproof.ledger import (
     list_manifests,
     worst_verdict,
 )
+from sciproof.manifest import load_manifest
+from sciproof.policy import POLICY_VERSION, load_policy
 from sciproof.signing import sign_manifest
 from sciproof.suggest import suggest_inputs
 from sciproof.textutil import safe_text
+from sciproof.update import declarations_of, describe_update, update_baseline
 from sciproof.verify import (
     DEFAULT_RERUN_TIMEOUT_SECONDS,
     Status,
@@ -199,10 +203,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ver.add_argument(
         "--format",
-        choices=("text", "json", "markdown"),
+        choices=("text", "json", "markdown", "junit"),
         default=None,
-        help="report format: text (default), json, or markdown for CI summaries "
-        "(for example: >> $GITHUB_STEP_SUMMARY); exit codes are the same for all",
+        help="report format: text (default), json, markdown for CI summaries (for example: "
+        ">> $GITHUB_STEP_SUMMARY) or junit XML for CI test viewers; exit codes are the same",
+    )
+    ver.add_argument(
+        "--policy",
+        type=Path,
+        metavar="FILE",
+        help="also check the rules of this policy file (TOML) against the evidence; see "
+        "docs/POLICY.md",
+    )
+    ver.add_argument(
+        "--save-json",
+        type=Path,
+        metavar="FILE",
+        help="also write the JSON report to this file (whatever --format prints)",
     )
 
     sug = sub.add_parser(
@@ -229,6 +246,22 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sig.add_argument("manifest", type=Path)
     sig.add_argument("--key", type=Path, required=True, metavar="KEY", help="private key file")
+
+    upd = sub.add_parser(
+        "update",
+        help="capture the recorded experiment again (re-baseline) and show what changed",
+        description=(
+            "Repeat the capture of MANIFEST with exactly the declarations it contains (command, "
+            "inputs, outputs, tolerances, claims, note, hardware), replace the manifest, and show "
+            "the differences from the old one. This EXECUTES the recorded command, like "
+            "'verify --rerun', so it asks for confirmation (or needs --yes)."
+        ),
+    )
+    upd.add_argument("manifest", type=Path)
+    upd.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    upd.add_argument("--dry-run", action="store_true", help="show what would happen; run nothing")
+    upd.add_argument("--note", metavar="TEXT", help="replace the note of the manifest")
+    upd.add_argument("--timeout", type=float, default=None, metavar="SECONDS")
 
     dif = sub.add_parser(
         "diff",
@@ -257,7 +290,7 @@ def _build_parser() -> argparse.ArgumentParser:
     lst.add_argument("-r", "--recursive", action="store_true", help="also look in subdirectories")
     lst.add_argument("--check", action="store_true", help="verify every manifest (integrity only)")
     lst.add_argument("--json", action="store_true", help="same as --format json")
-    lst.add_argument("--format", choices=("text", "json", "markdown"), default=None)
+    lst.add_argument("--format", choices=("text", "json", "markdown", "junit"), default=None)
 
     exp = sub.add_parser(
         "export",
@@ -278,6 +311,12 @@ def _build_parser() -> argparse.ArgumentParser:
     exp.add_argument(
         "-o", "--output", type=Path, metavar="FILE", help="write here (default: stdout)"
     )
+
+    pol = sub.add_parser(
+        "check-policy",
+        help="validate a policy file and list its rules (nothing is verified)",
+    )
+    pol.add_argument("policy", type=Path)
 
     ins = sub.add_parser("inspect", help="show a readable summary; never executes anything")
     ins.add_argument("manifest", type=Path)
@@ -375,11 +414,29 @@ def _report_format(args: argparse.Namespace) -> str:
     return args.format or ("json" if args.json else "text")
 
 
+def _run_check_policy(args: argparse.Namespace) -> int:
+    policy = load_policy(args.policy)
+    rules = [
+        f"  {section}.{key} = {value!r}"
+        for section, content in policy.rules.items()
+        for key, value in content.items()
+    ]
+    digest = policy.sha256[:16]
+    print(
+        f"policy {safe_text(policy.file)} is valid (version {POLICY_VERSION}, sha256 {digest}...)"
+    )
+    print("\n".join(rules) if rules else "  (no rules: every verification passes this policy)")
+    return EXIT_OK
+
+
 def _run_list(args: argparse.Namespace) -> int:
     output_format = _report_format(args)
     entries = list_manifests(args.directory, recursive=args.recursive, check=args.check)
-    printer = {"json": format_json, "markdown": format_markdown}.get(output_format, format_text)
-    print(printer(entries, args.check))
+    if output_format == "junit":
+        print(list_junit(entries), end="")
+    else:
+        printer = {"json": format_json, "markdown": format_markdown}.get(output_format, format_text)
+        print(printer(entries, args.check))
     if not args.check:
         return EXIT_OK
     return {"PASS": EXIT_OK, "FAIL": EXIT_FAIL, "INCONCLUSIVE": EXIT_INCONCLUSIVE}.get(
@@ -408,6 +465,35 @@ def _run_sign(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _run_update(args: argparse.Namespace) -> int:
+    if args.dry_run:
+        manifest = load_manifest(args.manifest)
+        print(describe_update(args.manifest.resolve(), declarations_of(manifest)))
+        return EXIT_OK
+    result = update_baseline(
+        args.manifest,
+        assume_yes=args.yes,
+        confirm=_confirm if not args.yes else None,
+        note=args.note,
+        timeout=args.timeout,
+    )
+    if result is None:
+        print("declined; nothing was executed and nothing was changed", file=sys.stderr)
+        return EXIT_INCONCLUSIVE
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    print(
+        f"Updated {result.capture.manifest_path.name} "
+        f"(command exit code {result.capture.exit_code})"
+    )
+    print()
+    print(result.diff.to_text())
+    if result.capture.exit_code != 0:
+        print("The command failed; the failure was recorded.", file=sys.stderr)
+        return EXIT_FAIL
+    return EXIT_OK
+
+
 def _run_diff(args: argparse.Namespace) -> int:
     output_format = _report_format(args)
     report = diff_manifests(args.old, args.new)
@@ -432,11 +518,16 @@ def _run_verify(args: argparse.Namespace) -> int:
         clean_env=args.clean_env,
         pass_env=args.pass_env,
         allowed_signers=args.allowed_signers,
+        policy=args.policy,
     )
+    if args.save_json is not None:
+        args.save_json.write_text(format_report_json(report) + "\n", encoding="utf-8", newline="\n")
     if output_format == "json":
         print(format_report_json(report))
     elif output_format == "markdown":
         print(report.to_markdown())
+    elif output_format == "junit":
+        print(report_junit(report), end="")
     else:
         print(format_report(report))
     return _STATUS_EXIT[report.status]
@@ -466,6 +557,10 @@ def main(argv: list[str] | None = None) -> int:
             return _run_verify(args)
         if args.command_name == "diff":
             return _run_diff(args)
+        if args.command_name == "update":
+            return _run_update(args)
+        if args.command_name == "check-policy":
+            return _run_check_policy(args)
         if args.command_name == "list":
             return _run_list(args)
         if args.command_name == "export":
