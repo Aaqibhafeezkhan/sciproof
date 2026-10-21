@@ -112,12 +112,17 @@ jobs:
         with:
           # Root-relative links are resolved against the live origin, so internal links are
           # checked on the deployed site. Pages that need a login or are rate limited are skipped.
+          # Two exclusions are false positives of that base URL: in-page anchors (#section) of the
+          # built files are joined to the site root, and the 404 page links to itself. Anchors are
+          # checked at build time by website/scripts/check-links.mjs.
           args: >-
             --no-progress
             --max-retries 2
             --accept 200,201,202,203,204,206,429
             --base-url ${{ env.SITE_ORIGIN }}
             --exclude 'issues/new'
+            --exclude '^https://hayagrivai-labs\.github\.io/#'
+            --exclude '^https://hayagrivai-labs\.github\.io/sciproof/404/$'
             --exclude 'api\.github\.com'
             --exclude '^https://github\.com/hayagrivai-labs/sciproof/(edit|issues/new)'
             --format markdown
