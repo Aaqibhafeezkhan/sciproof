@@ -30,7 +30,8 @@ file differs, and `verify --rerun` re-executes the command and compares `.json`,
 developers.
 
 This is the closest fit to the current feature set. See the
-[NumPy & pandas tutorial](TUTORIAL_NUMPY_PANDAS.md) for choosing tolerances.
+[NumPy & pandas tutorial](TUTORIAL_NUMPY_PANDAS.md) for choosing tolerances, or the
+[shell pipeline tutorial](TUTORIAL_SHELL_PIPELINE.md) for a non-Python experiment.
 
 ## 2. Regression testing for scientific software
 
