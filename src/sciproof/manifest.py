@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -291,7 +292,13 @@ def validate_manifest(data: Any) -> dict[str, Any]:
     name = _get(manifest, "name", str, "manifest")
     if not NAME_RE.fullmatch(name):
         raise _fail("name", f"{name!r} is not a valid experiment name")
-    _get(manifest, "created_at", str, "manifest")
+    created_at = _get(manifest, "created_at", str, "manifest")
+    try:
+        parsed_created_at = datetime.fromisoformat(created_at)
+    except ValueError:
+        raise _fail("manifest.created_at", f"not an ISO 8601 timestamp: {created_at!r}") from None
+    if parsed_created_at.tzinfo is None:
+        raise _fail("manifest.created_at", f"missing a timezone offset: {created_at!r}")
 
     command = _as_dict(_get(manifest, "command", dict, "manifest"), "command")
     argv = _get(command, "argv", list, "command")
