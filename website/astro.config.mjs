@@ -54,6 +54,7 @@ export default defineConfig({
             { label: 'Use cases', slug: 'docs/use-cases' },
             { label: 'Concepts', slug: 'docs/concepts' },
             { label: 'Tutorial: NumPy & pandas', slug: 'docs/tutorial-numpy-pandas' },
+            { label: 'Tutorial: shell pipeline', slug: 'docs/tutorial-shell-pipeline' },
           ],
         },
         {

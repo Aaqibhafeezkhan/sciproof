@@ -52,6 +52,12 @@ const PAGES = [
     source: 'docs/TUTORIAL_NUMPY_PANDAS.md',
     description: 'Record an experiment that uses NumPy and pandas and choose tolerances.',
   },
+  {
+    slug: 'tutorial-shell-pipeline',
+    title: 'Tutorial: shell pipeline',
+    source: 'docs/TUTORIAL_SHELL_PIPELINE.md',
+    description: 'Record and verify a reproducible shell and awk data pipeline.',
+  },
   { slug: 'manifest', title: 'Manifest format', source: 'docs/MANIFEST.md', description: 'The evidence manifest, field by field.' },
   { slug: 'exit-codes', title: 'Exit codes', source: 'docs/EXIT_CODES.md', description: 'Exit codes and verdicts of every command.' },
   { slug: 'python-api', title: 'Python API', source: 'docs/PYTHON_API.md', description: 'Capture and verify from Python: functions, types and stability.' },

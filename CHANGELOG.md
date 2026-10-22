@@ -6,6 +6,10 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+* A shell-pipeline tutorial for capturing and verifying non-Python experiments.
+
 * Numeric comparison (`--output-numeric`) supports tab-separated values (`.tsv`), compared with
   the declared tolerance like `.csv`.
 * Policy files with a leading UTF-8 BOM are accepted; the original file bytes remain covered by
