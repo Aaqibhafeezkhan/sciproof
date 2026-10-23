@@ -213,7 +213,7 @@ sciproof suggest-inputs [--input P]... [--output P]... -- COMMAND [ARGS...]
 * `--policy FILE` checks a TOML file of rules about the evidence itself (not older than N days,
   clean Git tree, signed, at least one claim, no tolerance looser than a ceiling, rerun with
   `--clean-env`, ...); each rule is a check of the report, and an unmet requirement is
-  `INCONCLUSIVE`, not a pass ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/POLICY.md)).
+  `INCONCLUSIVE`, not a pass ([docs/POLICY.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/POLICY.md)).
 * `update` captures the recorded experiment again with the declarations already in the manifest
   and shows what changed; it executes the recorded command, so it asks for confirmation
   ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/UPDATE.md)).
@@ -258,9 +258,12 @@ Inputs, outputs (`result`, `report`) and the safety notes: [docs/CI.md](https://
 * A manifest contains a command and must be treated as untrusted. `inspect` and plain `verify`
   never execute it; `--rerun` runs it **with your permissions, unsandboxed**. Only rerun
   manifests you trust, ideally in a disposable VM or container. See [SECURITY.md](https://github.com/hayagrivai-labs/sciproof/blob/main/SECURITY.md).
-* Manifests are **not signed** (a tested recipe using `ssh-keygen -Y` is in
-  [docs/DESIGN_SIGNING.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/DESIGN_SIGNING.md)): hashes detect changes, they do not stop someone who can rewrite
-  both manifest and files from fabricating consistent evidence.
+* Manifests can be signed with OpenSSH and checked against an explicit allowed-signers file;
+  see [docs/SIGNING.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/SIGNING.md).
+  A signature shows that the holder of an allowed key vouched for those exact manifest bytes; it
+  does not show that the experiment is correct, that it was run as described, when it was signed,
+  or that the key and trust file were not compromised. Without a signature, hashes do not stop
+  someone who can rewrite both the manifest and files from fabricating consistent evidence.
 * Only declared files are tracked. Undeclared inputs, network, time and system libraries are
   invisible. SciProof reports environment differences but does not recreate environments.
 * stdout/stderr and the command line are stored in the manifest; review them for secrets.
@@ -286,9 +289,11 @@ Full analysis, with what could not be confirmed: [docs/COMPETITIVE_ANALYSIS.md](
 Nothing below is promised. Each item is only worth doing if real users ask for it:
 
 1. Try it on real experiments of a few researchers; record what is awkward or missing.
-2. Based on that: more numeric formats (for example `.npz`), directory outputs, or a manifest export to RO-Crate
-   for interoperability.
-3. Signing or timestamping of manifests, if integrity against a hostile party matters to users.
+2. Based on that: more numeric formats (for example `.npz`) or a manifest export to RO-Crate for
+   interoperability. Directory inputs and exact directory outputs are already supported; see
+   [the manifest format](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/MANIFEST.md#directories).
+3. Add trusted timestamping only if users need it. Signing is already supported, but it does not
+   establish when a manifest was signed; see [docs/SIGNING.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/SIGNING.md).
 
 ## Contributing
 
