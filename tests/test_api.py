@@ -30,11 +30,12 @@ def test_the_api_does_not_shadow_the_modules_with_the_same_names():
     assert callable(sciproof.capture_experiment)
 
 
-def test_capture_then_verify_through_the_api(project):
+@pytest.mark.parametrize("base", [lambda path: path, lambda path: str(path)])
+def test_capture_then_verify_through_the_api(project, base):
     result = sciproof.capture_experiment(
         name="api",
         argv=[sys.executable, "experiment.py"],
-        base=project.root,
+        base=base(project.root),
         inputs=["data.json", "experiment.py"],
         numeric_outputs=["out/result.json"],
         rtol=1e-9,

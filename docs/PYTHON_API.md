@@ -29,7 +29,8 @@ A complete, runnable version is `examples/api_usage.py`.
 
 ### `capture_experiment(*, name, argv, base, inputs=None, outputs=None, numeric_outputs=None, rtol=1e-9, atol=0.0, timeout=None, max_log_bytes=..., force=False, claims=None, note=None, record_hardware=False) -> CaptureResult`
 
-Runs `argv` once in `base` (no shell) and writes `<name>.sciproof.json` there. The arguments
+Runs `argv` once in `base` (no shell) and writes `<name>.sciproof.json` there. `base` accepts a
+string, `pathlib.Path`, or another `os.PathLike` value. The arguments
 mean what the `sciproof capture` options mean; paths are relative to `base`. A command that exits
 nonzero still produces evidence; check `result.exit_code`. `result.warnings` holds what the CLI
 prints as `warning:` lines (for example `rtol >= 1`). Raises `CaptureError` if the evidence cannot

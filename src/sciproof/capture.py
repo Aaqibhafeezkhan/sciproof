@@ -168,7 +168,7 @@ def capture(
     *,
     name: str,
     argv: list[str],
-    base: Path,
+    base: str | os.PathLike[str],
     inputs: list[str] | None = None,
     outputs: list[str] | None = None,
     numeric_outputs: list[str] | None = None,
@@ -199,7 +199,7 @@ def capture(
         raise CaptureError("timeout must be a positive number of seconds")
     if max_log_bytes < 0:
         raise CaptureError("max-log-bytes must not be negative")
-    base = base.resolve()
+    base = Path(base).resolve()
 
     try:
         input_paths = [to_manifest_path(base, p) for p in (inputs or [])]
