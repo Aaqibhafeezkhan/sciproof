@@ -36,13 +36,20 @@ from typing import Any
 
 from sciproof.calibrate import _round_up, _spread
 from sciproof.capture import DEFAULT_MAX_LOG_BYTES, CaptureResult, capture
-from sciproof.errors import CaptureError
+from sciproof.errors import CaptureError, CommandFailed
 from sciproof.hashing import sha256_file
 from sciproof.manifest import MANIFEST_SUFFIX, NAME_RE
 from sciproof.numeric import Leaf, NumericFormatError, load_numeric
 from sciproof.paths import to_manifest_path
-from sciproof.runner import CommandInterrupted, CommandNotRunnable, CommandTimeout, run_command
+from sciproof.runner import (
+    CommandInterrupted,
+    CommandNotRunnable,
+    CommandTimeout,
+    ExecResult,
+    run_command,
+)
 from sciproof.suggest import suggest_inputs
+from sciproof.textutil import safe_text
 
 IGNORED_DIRECTORIES = frozenset(
     {
@@ -66,6 +73,8 @@ MAX_DECLARED = 500
 DEFAULT_RTOL = 1e-9
 SAFETY_FACTOR = 10
 NUMERIC_SUFFIXES = (".json", ".csv", ".tsv")
+STDERR_TAIL_LINES = 10  # of a failed run, shown in the error
+STDERR_TAIL_CHARACTERS = 2000
 
 
 @dataclass
@@ -139,9 +148,21 @@ def _leaves(path: Path) -> list[Leaf] | None:
         return None
 
 
-def _run(argv: list[str], base: Path, timeout: float | None) -> int:
+def _failed(which: str, exit_code: int, stderr: bytes, hint: str) -> CommandFailed:
+    """The error for a failed run, with the end of its stderr (escaped)."""
+    text = stderr.decode("utf-8", "replace").rstrip()[-STDERR_TAIL_CHARACTERS:]
+    lines = text.splitlines()[-STDERR_TAIL_LINES:]
+    details = ["  last lines of its standard error:"] if lines else []
+    details += [f"    {safe_text(line, STDERR_TAIL_CHARACTERS)}" for line in lines]
+    return CommandFailed(
+        f"the {which} run of the command failed (exit status {exit_code}); nothing was recorded",
+        [*details, f"  ({hint})"],
+    )
+
+
+def _run(argv: list[str], base: Path, timeout: float | None) -> ExecResult:
     try:
-        return run_command(argv, base, timeout).exit_code
+        return run_command(argv, base, timeout)
     except CommandInterrupted as exc:
         raise CaptureError("interrupted; nothing was recorded") from exc
     except CommandTimeout as exc:
@@ -183,10 +204,7 @@ def record(
     before = _snapshot(base)
     found = suggest_inputs(argv, base, [], timeout)
     if found.exit_code != 0:
-        raise CaptureError(
-            f"the command exited with status {found.exit_code}; nothing was recorded "
-            "(record needs a run that succeeds)"
-        )
+        raise _failed("first", found.exit_code, found.stderr, "record needs a run that succeeds")
     after_first = _snapshot(base)
     created, modified = _changed(before, after_first)
     written = [p for p in created + modified if not is_skipped(p)]
@@ -204,8 +222,14 @@ def record(
     second_digest: dict[str, str] = {}
     second_leaves: dict[str, list[Leaf] | None] = {}
     if not fast:
-        if _run(argv, base, timeout) != 0:
-            raise CaptureError("the second run of the command failed; nothing was recorded")
+        second = _run(argv, base, timeout)
+        if second.exit_code != 0:
+            raise _failed(
+                "second",
+                second.exit_code,
+                second.stderr,
+                "a command that is not repeatable from the same starting state cannot be recorded",
+            )
         after_second = _snapshot(base)
         created_again, modified_again = _changed(before, after_second)
         for relative in created_again + modified_again:

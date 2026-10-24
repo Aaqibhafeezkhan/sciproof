@@ -19,7 +19,7 @@ from sciproof.badge import render_badge
 from sciproof.calibrate import calibrate
 from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, capture
 from sciproof.diffmanifests import diff_manifests, format_diff_json
-from sciproof.errors import ConfirmationRequired, SciProofError, UsageError
+from sciproof.errors import CommandFailed, ConfirmationRequired, SciProofError, UsageError
 from sciproof.export import format_in_toto, format_openlineage
 from sciproof.inspect_manifest import inspect_file
 from sciproof.junit import list_junit, report_junit
@@ -790,6 +790,8 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_OK
     except SciProofError as exc:
         print(f"error: {safe_text(str(exc), 2000)}", file=sys.stderr)
+        for line in exc.details if isinstance(exc, CommandFailed) else []:
+            print(safe_text(line, 2000), file=sys.stderr)
         return EXIT_ERROR
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)

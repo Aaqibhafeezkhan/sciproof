@@ -17,6 +17,14 @@ class CaptureError(SciProofError):
     """The experiment could not be captured."""
 
 
+class CommandFailed(CaptureError):
+    """A run of the command failed; ``details`` are lines to show after the message."""
+
+    def __init__(self, message: str, details: list[str]) -> None:
+        super().__init__(message)
+        self.details = details
+
+
 class UsageError(SciProofError):
     """An option has an invalid value."""
 

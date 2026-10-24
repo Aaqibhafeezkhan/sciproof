@@ -61,6 +61,7 @@ class Suggestions:
     hook_loaded: bool = True
     inside: list[str] = field(default_factory=list)  # undeclared files below the base directory
     outside: list[str] = field(default_factory=list)  # undeclared files elsewhere
+    stderr: bytes = b""  # the command's standard error, as it wrote it
 
 
 def _python_prefixes() -> list[Path]:
@@ -133,4 +134,6 @@ def suggest_inputs(
                 inside.append(relative.as_posix())
         elif not any(path.is_relative_to(prefix) for prefix in prefixes):
             outside.append(str(path))
-    return Suggestions(result.exit_code, hook_loaded, sorted(inside), sorted(outside))
+    return Suggestions(
+        result.exit_code, hook_loaded, sorted(inside), sorted(outside), result.stderr
+    )

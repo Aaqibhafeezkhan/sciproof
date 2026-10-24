@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from sciproof import cli, load_manifest, verify_manifest
-from sciproof.errors import CaptureError
+from sciproof.errors import CaptureError, CommandFailed
 from sciproof.record import record
 from sciproof.verify import Status
 
@@ -31,6 +31,8 @@ if os.environ.get("RANDOM_JSON"):
     json.dump({"label": str(random.random())}, open("out/label.json", "w"))
 if os.environ.get("ONLY_FIRST") and n == 1:
     pathlib.Path("out/first.txt").write_text("1")
+if os.environ.get("FAIL_SECOND") and n == 2:
+    open("gone.txt")
 """
 
 
@@ -43,7 +45,7 @@ def lab(tmp_path, monkeypatch):
     (root / "unrelated.txt").write_text("not read")
     counter = tmp_path / "count.txt"
     monkeypatch.setenv("COUNT_FILE", str(counter))
-    for name in ("NOISE", "RANDOM_TEXT", "RANDOM_JSON", "ONLY_FIRST"):
+    for name in ("NOISE", "RANDOM_TEXT", "RANDOM_JSON", "ONLY_FIRST", "FAIL_SECOND"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.chdir(root)
 
@@ -156,9 +158,46 @@ def test_a_command_that_writes_nothing_cannot_be_recorded(lab):
 
 
 def test_a_failing_command_is_not_recorded(lab):
-    with pytest.raises(CaptureError, match="exited with status 3"):
+    with pytest.raises(CaptureError, match=r"first run of the command failed \(exit status 3\)"):
         record(name="e", argv=[sys.executable, "-c", "raise SystemExit(3)"], base=lab.path)
     assert not (lab.path / "e.sciproof.json").exists()
+
+
+def test_a_failing_first_run_shows_the_end_of_its_stderr_escaped(lab):
+    script = (
+        "import sys\n"
+        "for i in range(30): print('line', i, file=sys.stderr)\n"
+        "print('ValueError: \\x1b[31mbad', file=sys.stderr)\n"
+        "raise SystemExit(3)"
+    )
+    with pytest.raises(CommandFailed) as caught:
+        record(name="e", argv=[sys.executable, "-c", script], base=lab.path)
+    assert "first run" in str(caught.value) and "exit status 3" in str(caught.value)
+    details = caught.value.details
+    assert details[0] == "  last lines of its standard error:"
+    assert details[-2] == "    ValueError: \\x1b[31mbad"  # the escape sequence is not printed raw
+    assert details[1] == "    line 21" and len(details) == 12  # the last ten lines only
+    assert "record needs a run that succeeds" in details[-1]
+
+
+def test_a_failing_run_without_stderr_shows_no_empty_section(lab):
+    with pytest.raises(CommandFailed) as caught:
+        record(name="e", argv=[sys.executable, "-c", "raise SystemExit(2)"], base=lab.path)
+    assert caught.value.details == ["  (record needs a run that succeeds)"]
+
+
+def test_a_failing_second_run_says_so_and_shows_the_end_of_its_stderr(lab, monkeypatch):
+    monkeypatch.setenv("FAIL_SECOND", "1")
+    with pytest.raises(CommandFailed) as caught:
+        lab.go()
+    message = str(caught.value)
+    assert message.startswith("the second run of the command failed (exit status 1)")
+    assert "nothing was recorded" in message
+    assert "FileNotFoundError" in caught.value.details[-2]
+    assert "gone.txt" in caught.value.details[-2]
+    assert "not repeatable" in caught.value.details[-1]
+    assert lab.runs() == 2
+    assert not (lab.path / "exp.sciproof.json").exists()
 
 
 def test_an_existing_manifest_stops_it_before_anything_runs(lab):
@@ -201,3 +240,13 @@ def test_cli_record_prints_the_summary_and_the_equivalent_command(lab, capsys):
 def test_cli_record_without_a_command_is_an_error(lab, capsys):
     assert cli.main(["record", "--name", "exp"]) == cli.EXIT_ERROR
     assert "no command given" in capsys.readouterr().err
+
+
+def test_cli_record_prints_the_stderr_of_the_failed_run(lab, monkeypatch, capsys):
+    monkeypatch.setenv("FAIL_SECOND", "1")
+    code = cli.main(["record", "--name", "exp", "--", sys.executable, "run.py"])
+    err = capsys.readouterr().err.splitlines()
+    assert code == cli.EXIT_ERROR
+    assert err[0].startswith("error: the second run of the command failed (exit status 1)")
+    assert err[1] == "  last lines of its standard error:"
+    assert err[-2].startswith("    FileNotFoundError:") and "gone.txt" in err[-2]
