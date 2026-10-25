@@ -25,6 +25,12 @@ pathlib.Path("out/stable.txt").write_text("stable")
 json.dump({"v": data["x"] * 2}, open("out/stable.json", "w"))
 if os.environ.get("NOISE"):
     json.dump({"loss": 1.0 + n * 1e-7, "label": "ok"}, open("out/noisy.json", "w"))
+if os.environ.get("LARGE_NOISE"):
+    json.dump({"loss": float(n)}, open("out/large-noise.json", "w"))
+if os.environ.get("REWRITE_STATE"):
+    state = pathlib.Path("state.json")
+    value = json.loads(state.read_text())
+    json.dump({"n": value["n"] + 1}, open(state, "w"))
 if os.environ.get("RANDOM_TEXT"):
     pathlib.Path("out/random.txt").write_text(str(random.random()))
 if os.environ.get("RANDOM_JSON"):
@@ -45,7 +51,15 @@ def lab(tmp_path, monkeypatch):
     (root / "unrelated.txt").write_text("not read")
     counter = tmp_path / "count.txt"
     monkeypatch.setenv("COUNT_FILE", str(counter))
-    for name in ("NOISE", "RANDOM_TEXT", "RANDOM_JSON", "ONLY_FIRST", "FAIL_SECOND"):
+    for name in (
+        "NOISE",
+        "LARGE_NOISE",
+        "REWRITE_STATE",
+        "RANDOM_TEXT",
+        "RANDOM_JSON",
+        "ONLY_FIRST",
+        "FAIL_SECOND",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.chdir(root)
 
@@ -97,6 +111,32 @@ def test_a_numeric_output_that_varies_gets_a_tolerance_that_covers_it(lab, monke
     assert compare["out/noisy.json"]["rtol"] == rtol
     assert compare["out/stable.json"]["rtol"] == 1e-9
     assert "--tolerance out/noisy.json" in result.command_line
+
+
+def test_a_read_and_written_file_is_not_declared_as_an_output(lab, monkeypatch):
+    (lab.path / "state.json").write_text('{"n": 0}')
+    monkeypatch.setenv("REWRITE_STATE", "1")
+
+    result = lab.go()
+
+    assert "state.json" not in result.exact + result.numeric
+    assert ("state.json", "read and written by the command: it is state, not a result") in (
+        result.excluded
+    )
+    manifest = load_manifest(result.capture.manifest_path)
+    assert "state.json" not in [output["path"] for output in manifest["outputs"]]
+
+
+def test_a_numeric_output_with_a_meaningless_tolerance_is_not_declared(lab, monkeypatch):
+    monkeypatch.setenv("LARGE_NOISE", "1")
+
+    result = lab.go()
+
+    assert "out/large-noise.json" not in result.numeric
+    assert any(
+        path == "out/large-noise.json" and "derived rtol" in reason and "1 or more" in reason
+        for path, reason in result.excluded
+    )
 
 
 def test_an_output_that_differs_between_identical_runs_is_not_declared(lab, monkeypatch):

@@ -4,20 +4,23 @@
 output may be compared exactly or only within a tolerance. ``sciproof record`` finds that out by
 running the command, and then captures it with what it found:
 
-1. The command is run once with Python's audit hook installed (as ``suggest-inputs`` does). The
-   files it **read** inside the working directory are the inputs; the files it **created or
-   changed** are the outputs. Files below ``.git``, virtual environments, caches and SciProof's
-   own files are never considered.
+1. The command is run once with Python's audit hook installed (as ``suggest-inputs`` does). Files
+   it **read** inside the working directory are inputs and files it **created or changed** are
+   candidate outputs. A file that was both read and changed is state rather than a reproducible
+   result, so it is not declared. Files below ``.git``, virtual environments, caches and
+   SciProof's own files are never considered.
 2. Unless ``--fast``, it is run a second time from the same starting state. An output that is
    identical both times is declared; a JSON, CSV or TSV output that differs only in its numbers is
    declared with a tolerance that covers the difference (ten times the spread, as ``calibrate``
-   suggests); any other output that differs is not declared at all, because an exact hash of it
-   could never be verified, and it is listed so that nothing is silently left out.
+   suggests) only when that tolerance is below 1; any other output that differs is not declared
+   at all, because an exact hash of it could never be verified, and it is listed so that nothing
+   is silently left out.
 3. The command is captured for real, with those declarations.
 
 So the command runs three times (twice with ``--fast`` skipping the second). Files that the
 command created are removed between the runs so that each run starts from the same state; a file
-that existed before and was rewritten cannot be restored and is recorded as an output.
+that existed before and was rewritten cannot be restored, and it is excluded when it was also
+read as command state.
 
 This finds what Python code opened. Reads by C extensions through their own handles, by other
 programs and over the network are invisible, and for a command that is not Python no input can
@@ -243,10 +246,16 @@ def record(
     else:
         notes.append("determinism was not checked (--fast): every output is assumed stable")
 
+    read_and_written = set(found.inside) & set(written)
     exact: list[str] = []
     numeric: list[str] = []
     tolerances: dict[str, dict[str, float]] = {}
     for relative in written:
+        if relative in read_and_written:
+            excluded.append(
+                (relative, "read and written by the command: it is state, not a result")
+            )
+            continue
         parsed = first_leaves[relative]
         if fast or second_digest.get(relative) == first_digest[relative]:
             (numeric if parsed is not None else exact).append(relative)
@@ -261,10 +270,18 @@ def record(
             if problem:
                 excluded.append((relative, f"differs between two identical runs: {problem}"))
             else:
-                numeric.append(relative)
-                tolerances[relative] = {
-                    "rtol": max(DEFAULT_RTOL, _round_up(max_rel * SAFETY_FACTOR))
-                }
+                rtol = max(DEFAULT_RTOL, _round_up(max_rel * SAFETY_FACTOR))
+                if rtol >= 1:
+                    excluded.append(
+                        (
+                            relative,
+                            "differs between two identical runs: "
+                            f"derived rtol {rtol:g} is 1 or more",
+                        )
+                    )
+                else:
+                    numeric.append(relative)
+                    tolerances[relative] = {"rtol": rtol}
 
     declared_outputs = set(exact) | set(numeric)
     never_inputs = set(first_digest) | set(second_digest)
