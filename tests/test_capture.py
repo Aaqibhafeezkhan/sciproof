@@ -69,6 +69,23 @@ def test_failed_command_that_produced_no_output_records_it_as_absent(project):
     assert load_manifest(project.manifest)["outputs"][0]["present"] is False
 
 
+def test_failed_command_with_numeric_outputs_leaves_no_evidence(project):
+    # Adaptation from the issue sketch: on current main the failure is
+    # reported as "the command failed and the numeric output ... does not
+    # exist" (capture.py), not "command failed with exit code" — the error
+    # does not name the exit code. The test matches the actual message;
+    # changing the message would be a behaviour change outside this issue.
+    with pytest.raises(CaptureError, match="the command failed and the numeric output"):
+        project.capture(
+            name="test-fail-numeric",
+            argv=[sys.executable, "-c", "import sys; sys.exit(2)"],
+            numeric_outputs=["result.json"],
+            outputs=[],
+        )
+    assert not project.manifest.exists()
+    assert not (project.root / "test-fail-numeric.sciproof.d").exists()
+
+
 def test_successful_command_must_produce_declared_outputs(project):
     with pytest.raises(CaptureError, match="does not exist"):
         project.capture(argv=[sys.executable, "-c", "pass"], outputs=["out/never.txt"])
