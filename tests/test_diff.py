@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 
@@ -291,6 +292,27 @@ def test_a_missing_snapshot_is_said_too(project, pair):
     (project.root / "b.sciproof.d" / "1-result.json").unlink()
     out = next(c for c in diff_manifests(old, new).changes if c.subject == "out/result.json")
     assert "is missing" in out.message
+
+
+def test_corrupted_numeric_snapshot_reports_numeric_not_comparable(project, pair):
+    old, new = pair(between=lambda: (project.root / "data.json").write_text('{"x": 10}'))
+    snapshot = project.root / "a.sciproof.d" / "1-result.json"
+    snapshot.write_text("not-a-valid-json-or-csv-{{{")
+    # Corrupting the snapshot alone would trip the integrity ("was modified")
+    # branch before parsing, so re-record the corrupted snapshot's digest in
+    # the old manifest: this is the snapshot load_numeric actually fails on.
+    digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+
+    def _rerecord(manifest):
+        for item in manifest["outputs"]:
+            if item["path"] == "out/result.json":
+                item["compare"]["snapshot"]["sha256"] = digest
+
+    _edit(old, _rerecord)
+    out = next(c for c in diff_manifests(old, new).changes if c.subject == "out/result.json")
+    assert "numeric comparison not possible" in out.message
+    assert "is not valid JSON" in out.message
+    assert out.evidence["numeric"]["comparable"] is False
 
 
 # ---------------------------------------------------------------- output formats
