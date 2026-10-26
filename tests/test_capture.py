@@ -314,3 +314,16 @@ def test_duplicate_input_paths_are_rejected(project):
             outputs=[],
             numeric_outputs=[],
         )
+
+
+def test_unwritable_manifest_destination_raises_capture_error(project):
+    # A directory at the manifest destination: with force=True the
+    # already-exists check is skipped, so the atomic os.replace in
+    # write_manifest fails with OSError and capture reports it as
+    # CaptureError("cannot write ..."). The issue sketch alone hits the
+    # already-exists check first, and its "pass" command never produces
+    # the declared output, so the default fixture capture (which does
+    # produce its outputs) is used to reach the manifest write.
+    (project.root / "unwritable.sciproof.json").mkdir()
+    with pytest.raises(CaptureError, match="cannot write"):
+        project.capture(name="unwritable", force=True)
