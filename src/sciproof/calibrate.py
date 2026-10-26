@@ -53,6 +53,7 @@ class OutputSpread:
     max_abs: float = 0.0
     max_rel: float = 0.0
     suggestion: str | None = None
+    suggested_rtol: float | None = None
 
 
 @dataclass
@@ -69,6 +70,32 @@ class CalibrationReport:
         return all(o.ok for o in self.outputs) and all(
             code == self.recorded_exit_code for code in self.exit_codes
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        outputs = []
+        for output in self.outputs:
+            item = {
+                "path": output.path,
+                "mode": output.mode,
+                "ok": output.ok,
+                "message": output.message,
+            }
+            if output.mode == "numeric":
+                item.update(max_abs=output.max_abs, max_rel=output.max_rel)
+            if output.suggested_rtol is not None:
+                item["suggestion"] = {"rtol": output.suggested_rtol}
+            outputs.append(item)
+        return {
+            "schema": "sciproof.calibration",
+            "schema_version": "1.0",
+            "name": self.name,
+            "runs": self.runs,
+            "recorded_exit_code": self.recorded_exit_code,
+            "exit_codes": list(self.exit_codes),
+            "result": "STABLE" if self.ok else "VARIES",
+            "outputs": outputs,
+            "notes": list(self.notes),
+        }
 
     def to_text(self) -> str:
         lines = [
@@ -305,9 +332,8 @@ def _judge(
         return OutputSpread(path, "numeric", False, problem)
     if max_rel == 0.0:
         return OutputSpread(path, "numeric", True, "identical in every run and as recorded")
-    suggestion = (
-        f"--tolerance {path} 'rtol={_round_up(max_rel * SAFETY_FACTOR):.0e}'" if outside else None
-    )
+    suggested_rtol = _round_up(max_rel * SAFETY_FACTOR) if outside else None
+    suggestion = f"--tolerance {path} 'rtol={suggested_rtol:.0e}'" if outside else None
     detail = f"varies by up to {max_rel:.3g} relative ({max_abs:.3g} absolute)"
     if outside:
         return OutputSpread(
@@ -319,6 +345,7 @@ def _judge(
             max_abs,
             max_rel,
             suggestion,
+            suggested_rtol,
         )
     return OutputSpread(
         path,

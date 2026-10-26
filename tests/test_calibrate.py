@@ -150,3 +150,94 @@ def test_cli_calibrate_without_a_terminal_refuses(noisy, capsys, monkeypatch):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     assert cli.main(["calibrate", project.manifest.name]) == cli.EXIT_ERROR
     assert "refusing to execute" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flags", [["--format", "json"], ["--json"]])
+@pytest.mark.parametrize("stable", [True, False])
+def test_cli_calibration_json_is_one_object_with_numeric_suggestions(noisy, capsys, flags, stable):
+    project = noisy(rtol=1e-3 if stable else 1e-12)
+    before = project.manifest.read_bytes()
+    outputs = {p: (project.root / p).read_bytes() for p in ["out/m.json", "out/e.txt"]}
+
+    code = cli.main(["calibrate", project.manifest.name, "--runs", "3", "--yes", *flags])
+
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert code == (cli.EXIT_OK if stable else cli.EXIT_FAIL)
+    assert report["schema"] == "sciproof.calibration"
+    assert report["schema_version"] == "1.0"
+    assert report["name"] == "exp" and report["runs"] == 3
+    assert report["recorded_exit_code"] == 0 and report["exit_codes"] == [0, 0, 0]
+    assert report["result"] == ("STABLE" if stable else "VARIES")
+    numeric = next(o for o in report["outputs"] if o["mode"] == "numeric")
+    assert numeric["ok"] is stable and numeric["max_abs"] > 0 and numeric["max_rel"] > 0
+    if not stable:
+        assert isinstance(numeric["suggestion"]["rtol"], float)
+        assert numeric["suggestion"]["rtol"] >= numeric["max_rel"] * 10
+    else:
+        assert "suggestion" not in numeric
+    exact = next(o for o in report["outputs"] if o["mode"] == "exact")
+    assert exact["ok"] and "max_abs" not in exact
+    assert report["notes"] and captured.err == ""
+    assert project.manifest.read_bytes() == before
+    assert all((project.root / p).read_bytes() == data for p, data in outputs.items())
+
+
+def test_json_suggestion_agrees_with_the_existing_text_report(noisy):
+    report = calibrate(noisy(rtol=1e-12).manifest, runs=3, assume_yes=True)
+    numeric = report.outputs[1]
+    suggested = report.to_dict()["outputs"][1]["suggestion"]["rtol"]
+    assert suggested == float(numeric.suggestion.split("rtol=")[1].rstrip("'"))
+    assert numeric.suggestion in report.to_text()
+
+
+@pytest.mark.parametrize("flags", [["--format", "json"], ["--json"]])
+def test_json_decline_and_error_keep_stdout_empty(noisy, capsys, monkeypatch, flags):
+    project = noisy()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "no")
+    assert cli.main(["calibrate", project.manifest.name, "--runs", "2", *flags]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and "declined" in captured.err
+    assert not (project.root / "count.txt").exists()
+    assert cli.main(["calibrate", project.manifest.name, "--runs", "1", *flags]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "" and "between 2 and 50" in captured.err
+    assert not (project.root / "count.txt").exists()
+
+
+def test_conflicting_calibration_formats_are_rejected_before_running(noisy, capsys):
+    project = noisy()
+    assert (
+        cli.main(["calibrate", project.manifest.name, "--yes", "--json", "--format", "text"]) == 3
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "" and "conflicts" in captured.err
+    assert not (project.root / "count.txt").exists()
+
+
+@pytest.mark.parametrize("spread", [float("inf"), float("-inf"), float("nan")])
+def test_non_finite_json_is_an_error_not_a_partial_report(capsys, monkeypatch, spread):
+    from sciproof.calibrate import CalibrationReport, OutputSpread
+
+    report = CalibrationReport(
+        "exp",
+        2,
+        0,
+        [0, 0],
+        [OutputSpread("out/m.json", "numeric", False, "varies", max_abs=spread)],
+    )
+    monkeypatch.setattr(cli, "calibrate", lambda *args, **kwargs: report)
+    assert cli.main(["calibrate", "exp.sciproof.json", "--yes", "--json"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "" and "non-finite" in captured.err
+
+
+def test_json_confirmation_prompt_stays_on_stderr(noisy, capsys, monkeypatch):
+    project = noisy()
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "yes")
+    assert cli.main(["calibrate", project.manifest.name, "--runs", "2", "--json"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["result"] == "STABLE"
+    assert "EXECUTE" in captured.err and "noisy.py" in captured.err

@@ -34,3 +34,7 @@ esac
 
 With `--json`, the report is printed as one JSON object on stdout; the exit codes stay the same.
 Prompts and errors go to stderr.
+
+For `calibrate`, `0` means `STABLE`, `1` means `VARIES`, `2` means confirmation was declined,
+and `3` means an error. With `--format json` or `--json`, a completed calibration prints
+one JSON report; declines and errors leave stdout empty. The exit codes do not depend on format.

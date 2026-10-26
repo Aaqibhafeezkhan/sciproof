@@ -11,6 +11,7 @@ Exit codes
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -348,6 +349,8 @@ def _build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--runs", type=int, default=5, metavar="N", help="2 to 50 (default 5)")
     cal.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     cal.add_argument("--timeout", type=float, default=None, metavar="SECONDS", help="per run")
+    cal.add_argument("--format", choices=("text", "json"), help="report format (default: text)")
+    cal.add_argument("--json", action="store_true", help="same as --format json")
 
     dif = sub.add_parser(
         "diff",
@@ -691,6 +694,7 @@ def _run_record(args: argparse.Namespace) -> int:
 
 
 def _run_calibrate(args: argparse.Namespace) -> int:
+    output_format = _report_format(args)
     report = calibrate(
         args.manifest,
         runs=args.runs,
@@ -701,7 +705,14 @@ def _run_calibrate(args: argparse.Namespace) -> int:
     if report is None:
         print("declined; nothing was executed", file=sys.stderr)
         return EXIT_INCONCLUSIVE
-    print(report.to_text())
+    if output_format == "json":
+        try:
+            text = json.dumps(report.to_dict(), indent=2, allow_nan=False)
+        except ValueError as exc:
+            raise UsageError("calibration report contains a non-finite number") from exc
+    else:
+        text = report.to_text()
+    print(text)
     return EXIT_OK if report.ok else EXIT_FAIL
 
 

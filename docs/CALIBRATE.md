@@ -32,6 +32,19 @@ Text, booleans, missing keys and a changed exit code are reported as differences
 The result is `STABLE` (exit status 0) or `VARIES` (1); 2 means the confirmation was declined and
 3 an error ([exit codes](EXIT_CODES.md)).
 
+## Machine-readable output
+
+Use `sciproof calibrate baseline.sciproof.json --runs 5 --yes --format json`
+(or `--json`) to print one JSON object on stdout. Prompts and errors remain on stderr,
+and the text format and exit codes are unchanged. Declining or failing produces no JSON report.
+
+The report identifies itself with `schema: "sciproof.calibration"` and `schema_version: "1.0"`.
+It includes the experiment `name`, `runs`, `recorded_exit_code`, `exit_codes`, `result`
+(`STABLE` or `VARIES`), `outputs` and `notes`. Every output has `path`, `mode`, `ok` and
+`message`; numeric outputs also include `max_abs` and `max_rel`. When a tolerance is suggested,
+`suggestion.rtol` is a JSON number, not a command string. Non-finite numbers are refused
+instead of emitting non-standard JSON.
+
 ## How to read the suggestion
 
 The suggested `rtol` is **ten times the largest relative spread seen**, rounded up to one digit.
