@@ -9,7 +9,6 @@ tags:
   - artifact evaluation
 authors:
   - name: Alok Pandey
-    orcid: 0000-0000-0000-0000
     affiliation: 1
 affiliations:
  - name: HayagrivAI Labs
@@ -37,6 +36,15 @@ Modern reproducibility mandates by major scientific venues (such as *Nature*, *S
 3. **Direct LaTeX Macro Export:** `sciproof export --format latex` generates LaTeX `\newcommand` macros directly from verified outputs, ensuring paper values can never drift from experimental reality.
 4. **Local-First & Offline:** The entire package has zero external runtime dependencies and requires no cloud servers, databases, or API keys.
 5. **Standards Interoperability:** Manifests can be exported as in-toto statements [@kupferschmidt2019intoto] or mapped to RO-Crates [@soylu2022ro-crate] for institutional archival.
+
+# State of the Field
+
+Several existing tools address aspects of computational reproducibility:
+* **ReproZip** traces Linux system calls to package binaries and dependencies into a self-contained bundle, but focuses on Linux execution capture rather than multi-platform continuous numerical assertion.
+* **Popper** utilizes container workflows to automate execution pipelines, whereas `SciProof` operates directly within standard virtual environments with zero container requirements.
+* **DVC (Data Version Control)** provides Git-like tracking for large datasets and pipelines, targeting large-scale MLOps infrastructure rather than lightweight, turnkey artifact evaluation for conference and journal reviewers.
+
+`SciProof` complements this ecosystem by prioritizing developer ergonomics, platform independence (full native Windows, macOS, and Linux support), and automated numerical tolerance auditing.
 
 # Workflow and Key Features
 
@@ -71,6 +79,16 @@ A peer reviewer or CI action verifies the results in one command:
 sciproof verify baseline.sciproof.json --rerun --yes
 ```
 The result produces an unambiguous verdict (`PASS`, `FAIL`, or `INCONCLUSIVE`).
+
+# Research Impact
+
+`SciProof` is designed for immediate integration into scientific research pipelines:
+* **Conference Artifact Evaluation:** Serves as a turnkey reproducibility engine for ACM, IEEE, NeurIPS, and ICML artifact evaluation committees.
+* **Automated CI Verification:** Enables continuous scientific validation on GitHub Actions, ensuring that ongoing codebase changes do not silently degrade numerical claims.
+
+# AI Usage Disclosure
+
+Generative AI assistance (LLMs) was utilized in drafting documentation and test scenario scaffolding. All algorithmic logic, verification mathematics, cryptographic digest pipelines, and final manuscript content were reviewed, verified, and authored by human contributors.
 
 # Availability & Implementation
 
