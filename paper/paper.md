@@ -19,36 +19,45 @@ bibliography: paper.bib
 
 # Summary
 
-Computational experiments across scientific domains frequently fail independent replication attempts [@baker2016reproducibility; @peng2011reproducible]. Even when research code is made publicly available, small differences in software dependencies, underlying hardware floating-point units, or operating systems can cause re-execution to produce numbers that diverge from the published manuscript [@stodden2018empirical].
+Computational experiments across scientific domains frequently fail independent replication attempts [@baker2016reproducibility; @peng2011reproducible]. Even when research code is made publicly available, subtle differences in operating systems, minor software dependency updates, or hardware-specific floating-point arithmetic frequently cause re-execution to produce numbers that diverge from published manuscripts [@stodden2018empirical].
 
-`SciProof` is a lightweight, zero-dependency Python tool designed to capture computational experiments and produce verifiable evidence manifests. It records cryptographic SHA-256 digests of all input datasets and generated outputs, stores system execution metadata, and enables automated re-execution checks. To address the reality of floating-point drift across hardware architectures, `SciProof` includes a calibration routine that empirically determines relative and absolute numerical tolerances (`rtol` and `atol`), allowing reviewers and continuous integration pipelines to distinguish acceptable precision variance from broken computations.
+`SciProof` is a lightweight, zero-dependency Python tool designed to capture computational experiments and produce tamper-evident, verifiable evidence manifests. It computes cryptographic SHA-256 digests of all declared input datasets and generated outputs, records granular runtime execution metadata, and provides automated sandbox re-execution. To accommodate the practical reality of floating-point drift across heterogeneous hardware architectures, `SciProof` includes an automated calibration routine that empirically measures output variance across repeated runs, allowing reviewers and continuous integration (CI) workflows to distinguish acceptable numerical variation from computational errors.
 
 # Statement of Need
 
-Academic venues and funding agencies increasingly mandate code and data sharing to combat irreproducibility. However, verifying that code actually reproduces published results remains difficult in practice:
+Academic venues and funding agencies increasingly mandate code and data sharing to combat irreproducibility. However, verifying that research code reproduces published claims remains operationally challenging in practice:
 
-1. **Containers vs. Verification:** Container systems such as Docker encapsulate dependencies, but they treat the executed code as a black box. They do not automatically verify whether output data matches declared numbers within acceptable bounds.
-2. **Heavyweight Infrastructure:** Production workflow orchestrators and data versioning tools (e.g., MLflow, DVC) often require remote databases, object storage buckets, or extensive code refactoring, creating friction for individual researchers.
-3. **Paper Number Drift:** A frequent failure mode during paper writing occurs when an experiment is re-run, but updated metrics are not propagated into LaTeX tables and figures, leading to inconsistencies in the published text.
+1. **Containers vs. Verification:** Container systems (such as Docker or Singularity) encapsulate software environments, but they treat executed code as a black box. They do not inspect, parse, or verify whether numerical metrics produced in the container match the specific values reported in a paper.
+2. **Infrastructure Overhead:** Production workflow orchestrators and data versioning tools (e.g., MLflow, DVC) require external tracking servers, object storage backends, or intrusive codebase refactoring. This operational burden often deters researchers from adopting rigorous provenance tracking.
+3. **Paper Number Drift:** A ubiquitous failure mode in computational science occurs when experimental code is updated during paper revisions, but authors forget to manually synchronize updated metrics across LaTeX tables and figures, leading to silent discrepancies in published work.
 
-`SciProof` addresses these practical hurdles by operating directly on standard Python scripts without requiring modifications to user code. It runs entirely locally, stores evidence in plain JSON manifests, and includes utilities to export verified values directly into LaTeX macros.
+`SciProof` resolves these challenges by operating non-invasively on standard scripts without requiring modifications to user code. It executes entirely locally, writes transparent JSON manifests, and exports verified values directly into LaTeX macros to eliminate paper number drift.
 
 # State of the Field
 
-Prior tools have tackled aspects of computational reproducibility from different angles:
+Prior tools have addressed aspects of computational reproducibility from different perspectives:
 
-* **Syscall Tracers:** ReproZip [@chirigati2016reprozip] uses `ptrace` on Linux to trace file access and bundle software environments into self-contained archives. While powerful for Linux packaging, it is platform-dependent and does not provide numerical tolerance evaluation across repeated runs.
-* **Workflow Engines:** Systems like Snakemake and Nextflow manage large-scale computational graphs but focus on scheduling and execution rather than lightweight verification of single-run experimental claims.
-* **Cryptographic Attestations:** Frameworks like in-toto [@kupferschmidt2019intoto] focus on software supply-chain integrity. `SciProof` shares these integrity principles and supports in-toto and RO-Crate [@soylu2022ro-crate] export, but tailors its user interface specifically to academic artifact evaluation.
+* **System Call Interception:** Tools like ReproZip [@chirigati2016reprozip] intercept Linux system calls via `ptrace` to bundle dependencies into a self-contained archive. While effective for Linux userland packaging, this approach is tightly coupled to Linux kernels and does not support multi-run numerical tolerance assertions.
+* **Large-Scale Workflow Engines:** Systems such as Nextflow and Snakemake manage complex computational pipelines across high-performance computing clusters. However, their primary objective is task scheduling and distributed execution rather than lightweight verification of single-run experimental claims.
+* **Cryptographic Attestation Frameworks:** Frameworks such as in-toto [@kupferschmidt2019intoto] provide software supply-chain integrity. `SciProof` shares these cryptographic integrity principles and supports both in-toto attestations and RO-Crate [@soylu2022ro-crate] export, but tailors its command-line interface specifically for scientific artifact evaluation.
 
-`SciProof` provides a lightweight alternative that works natively across Linux, macOS, and Windows with standard Python installations.
+### Build vs. Contribute Justification
+Rather than contributing extensions to existing workflow engines or MLOps frameworks, `SciProof` was designed from first principles as an independent, standalone tool. Existing platforms impose heavy infrastructure dependencies (such as container runtimes, remote storage buckets, or daemon services) that are incompatible with lightweight artifact evaluation workflows. Building `SciProof` as an unopinionated CLI tool ensures it can run without elevated permissions in any standard scientific environment, ranging from local laptops to air-gapped compute nodes.
 
-# Software Design and Core Workflow
+# Software Design
 
-The typical lifecycle of an experiment verified with `SciProof` involves three steps:
+The architecture of `SciProof` is guided by three explicit engineering trade-offs:
+
+1. **Zero External Runtime Dependencies:** To guarantee instant installation in restricted high-performance computing (HPC) environments without compilation toolchains or network access, `SciProof` is implemented exclusively using the Python standard library. Optional integration with libraries like NumPy is handled gracefully via dynamic runtime discovery.
+2. **Deterministic Manifest Serialization:** Cryptographic digests must be reproducible across operating systems. `SciProof` uses strictly ordered JSON serialization (sorted dictionary keys, compact separators, UTF-8 encoding) and normalized relative path representations, preventing false-positive integrity failures caused by filesystem or formatting discrepancies.
+3. **Cross-Platform Process Sandboxing:** Handling subprocess lifecycle reliably across platforms is challenging. `SciProof` implements platform-specific process management: on POSIX systems, commands run in dedicated process groups (`os.killpg`) to guarantee clean termination of process subtrees, whereas on Windows, process trees are managed via targeted task termination. Sandbox verification isolates newly generated files within temporary scratch directories, ensuring original workspace files are never inadvertently overwritten during review.
+
+# Core Workflow
+
+A standard verification lifecycle with `SciProof` consists of three stages:
 
 ```
-[Experiment Command] ---> sciproof record ---> [Manifest (.sciproof.json)]
+[Experiment Script] ---> sciproof record ---> [Evidence Manifest (.json)]
                                                         |
                                                         v
                                                sciproof calibrate
@@ -58,44 +67,47 @@ The typical lifecycle of an experiment verified with `SciProof` involves three s
 ```
 
 ### 1. Recording an Experiment
-A researcher runs their existing script using the `record` subcommand:
+A researcher captures their experiment using the `record` subcommand:
 
 ```bash
 sciproof record --name benchmark --inputs data.csv -- python train.py
 ```
 
-`SciProof` executes the command in a child process, computes SHA-256 hashes of the declared inputs and generated outputs, and writes a structured manifest (`benchmark.sciproof.json`) alongside execution metadata (CPU architecture, OS platform, Python version, runtime duration, and exit status).
+`SciProof` executes the script in a supervised child process, computes SHA-256 digests of all declared inputs and outputs, and writes an evidence manifest (`benchmark.sciproof.json`) containing execution metadata (CPU architecture, OS platform, Python version, runtime duration, and exit status).
 
 ### 2. Calibrating Numerical Tolerances
-Because floating-point calculations can vary between CPU architectures and BLAS implementations, exact bitwise matching of floating-point numbers is often impractical. The `calibrate` command runs the experiment multiple times to measure observed variation in JSON, CSV, or NumPy (`.npy`) outputs:
+Because identical scientific algorithms can produce minor numerical variations across different CPU vector instructions or BLAS backends, strict bitwise equality is often too brittle for scientific validation. The `calibrate` command re-executes the experiment across multiple runs to measure observed variance across numerical formats (JSON, CSV, and NumPy `.npy` arrays):
 
 ```bash
 sciproof calibrate benchmark.sciproof.json --runs 5
 ```
 
-It outputs empirical maximum absolute and relative deviations, recommending safe `atol` and `rtol` parameters for verification.
+It outputs observed maximum absolute and relative deviations, automatically suggesting realistic absolute (`atol`) and relative (`rtol`) tolerances.
 
 ### 3. Reviewer Verification
-A reviewer or automated GitHub Actions workflow verifies the experiment with a single command:
+A conference reviewer or automated CI runner validates the experiment in one command:
 
 ```bash
 sciproof verify benchmark.sciproof.json --rerun --yes
 ```
 
-The tool validates file integrity hashes, re-executes the command in a sandboxed directory, compares newly generated outputs against the recorded baseline using the calibrated tolerances, and outputs a concise `PASS` or `FAIL` verdict.
+The command verifies cryptographic file digests, re-executes the experiment inside an isolated sandbox, compares newly produced outputs against recorded baselines within calibrated tolerances, and prints an unambiguous `PASS` or `FAIL` verdict.
 
-### 4. Preventing Number Drift
-To ensure figures and tables in a manuscript match the underlying code, `SciProof` exports verified manifest values into LaTeX definitions:
+### 4. Direct LaTeX Export
+To prevent manuscript numbers from drifting when experiments are updated, `SciProof` exports verified manifest metrics directly into LaTeX definitions:
 
 ```bash
 sciproof export benchmark.sciproof.json --format latex > numbers.tex
 ```
 
-This allows authors to write `\newcommand{\accuracy}{94.2}` directly into their LaTeX document source, preventing manual transcription errors.
+This allows authors to directly include `\newcommand{\accuracy}{94.2}` within LaTeX source documents, eliminating manual transcription errors.
 
-# Research Impact and Artifact Evaluation
+# Research Impact Statement
 
-`SciProof` has been structured to streamline the submission workflow for conference Artifact Evaluation committees (such as ACM SIGMOD, OSDI, NeurIPS, and ICML). Authors can include a single `.sciproof.json` manifest and reproduction badge in their code repository, providing evaluators with an unambiguous, automated way to confirm experimental results.
+`SciProof` is specifically designed to support conference and journal reproducibility initiatives:
+* **Turnkey Artifact Evaluation:** Provides a standardized appendix template and machine-readable evidence manifest for conferences with Artifact Evaluation tracks (e.g., NeurIPS, ICML, ACM SIGMOD, IEEE S&P). Evaluators can reproduce experimental claims with a single deterministic command.
+* **Continuous Scientific Integration:** Includes a pre-configured GitHub Actions workflow that executes automated verification on pull requests, ensuring ongoing codebase modifications do not silently invalidate previously published experimental claims.
+* **Community Educational Materials:** Interactive Google Colab quickstart notebooks and end-to-end tutorial pipelines are provided to assist students and laboratories in adopting reproducible computational practices.
 
 # AI Usage Disclosure
 
@@ -103,6 +115,6 @@ No generative artificial intelligence tools were used in writing this manuscript
 
 # Availability
 
-`SciProof` is distributed under the MIT license. Source code, documentation, test suites, and Colab quickstart tutorials are publicly hosted on GitHub (`https://github.com/hayagrivai-labs/sciproof`). Releases are published on PyPI (`pip install sciproof`) and archived on Zenodo (DOI: [10.5281/zenodo.23676138](https://doi.org/10.5281/zenodo.23676138)).
+`SciProof` is distributed under the open-source MIT license. The source code, documentation, test suite, and educational tutorials are publicly accessible on GitHub (`https://github.com/hayagrivai-labs/sciproof`). Releases are published on PyPI (`pip install sciproof`) and permanently archived on Zenodo (DOI: [10.5281/zenodo.23676138](https://doi.org/10.5281/zenodo.23676138)).
 
 # References
