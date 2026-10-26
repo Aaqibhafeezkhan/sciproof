@@ -45,6 +45,12 @@ const PAGES = [
     description: 'Install SciProof, capture an experiment, inspect and verify its evidence.',
   },
   { slug: 'use-cases', title: 'Use cases', source: 'docs/USE_CASES.md', description: 'Where SciProof fits: ML experiments, scientific software, simulations, pipelines.' },
+  {
+    slug: 'for-researchers',
+    title: 'For Researchers',
+    source: 'docs/RESEARCH.md',
+    description: 'Reproducible research papers, LaTeX macro export, artifact evaluation, and reviewer verification.',
+  },
   { slug: 'concepts', title: 'Concepts', source: 'docs/CONCEPTS.md', description: 'What SciProof can and cannot tell you.' },
   {
     slug: 'tutorial-numpy-pandas',

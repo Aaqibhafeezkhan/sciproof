@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml/badge.svg)](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/sciproof.svg)](https://pypi.org/project/sciproof/)
+[![Documentation](https://img.shields.io/badge/docs-website-blue.svg)](https://hayagrivai-labs.github.io/sciproof/)
+[![Python](https://img.shields.io/pypi/pyversions/sciproof.svg)](https://pypi.org/project/sciproof/)
 [![Good first issues](https://img.shields.io/github/issues/hayagrivai-labs/sciproof/good%20first%20issue?color=7057ff&label=good%20first%20issues)](https://github.com/hayagrivai-labs/sciproof/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hayagrivai-labs/sciproof/blob/main/LICENSE)
 
@@ -9,9 +11,8 @@ Record a computational experiment once, then let anyone **check the evidence**: 
 unchanged, and does re-running the command give the recorded results, exactly or within a
 tolerance you declared?
 
-> **Status: alpha (0.3).** Small, local-first, offline, no runtime dependencies. The idea is
-> unproven with real users; see [the competitive analysis](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/COMPETITIVE_ANALYSIS.md) for
-> how it overlaps with the most widely used tools (DVC, MLflow).
+> **Status: 0.4.0.** Small, local-first, offline, zero runtime dependencies.
+> See [For Researchers](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/RESEARCH.md) for paper reproducibility, artifact evaluation, and LaTeX integration.
 
 ## The problem
 
@@ -39,6 +40,15 @@ supported outputs have not unexpectedly changed. Typical situations: ML experime
 regression testing for scientific software, numerical simulations, reproducing research results,
 data pipeline outputs and benchmark verification. Each one, with its limits, is described in
 [docs/USE_CASES.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/USE_CASES.md).
+
+## For Researchers & Paper Authors
+
+If you publish computational papers (ML, bioinformatics, numerical modeling):
+
+* **Zero code modifications:** Run `sciproof record -- python train.py` — inputs, outputs and environment are captured automatically.
+* **No manual copy-pasting into LaTeX:** `sciproof export --format latex -o values.tex` writes numbers as `\newcommand{\accuracy}{0.94}` directly from verified outputs, preventing paper number drift ([details](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/RESEARCH.md)).
+* **Calibrated tolerances:** `sciproof calibrate` measures numerical variance across runs and suggests realistic `rtol`/`atol` so floating-point noise never fails a reviewer check.
+* **Artifact Evaluation badge:** Add a reproducible evidence badge to your paper repository or provide one command (`sciproof verify --rerun`) for conference artifact reviewers.
 
 ## Install
 
