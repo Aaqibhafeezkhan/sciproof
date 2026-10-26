@@ -6,6 +6,12 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-27
+
+* Added dedicated researcher guide (`docs/RESEARCH.md`) covering paper reproducibility, LaTeX macro exports, and artifact evaluation.
+* Enhanced PyPI and repository discoverability with research and open-science taxonomy.
+* Zenodo archiving and DOI minting for academic citations.
+
 ## [0.4.0] - 2026-10-26
 
 * Contributing is easier: a dev container (GitHub Codespaces) with the dependencies installed, a short

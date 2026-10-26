@@ -3,7 +3,7 @@
 A number typed into a paper by hand can drift away from the experiment that produced it. This
 module writes the values of chosen locations of the declared outputs as LaTeX macros::
 
-    % SciProof 0.4.0: values of baseline.sciproof.json (verification: PASS)
+    % SciProof 0.4.1: values of baseline.sciproof.json (verification: PASS)
     \\newcommand{\\accuracy}{0.93}
 
 so that the paper says ``\\accuracy{}`` and the number can only come from the recorded output.

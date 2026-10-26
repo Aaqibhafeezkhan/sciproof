@@ -7,7 +7,7 @@ The names in ``__all__`` are the supported Python API (docs/PYTHON_API.md). Ever
 the package is internal and may change in any release.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 # The imports follow ``__version__`` on purpose: ``capture`` reads it while it is being imported.
 from sciproof.capture import CaptureResult  # noqa: E402
