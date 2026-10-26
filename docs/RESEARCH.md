@@ -81,7 +81,9 @@ sciproof badge main-experiment.sciproof.json -o docs/evidence.svg
 
 ## 5. Artifact Evaluation & Reviewer Checklist
 
-When submitting code to conference **Artifact Evaluation** tracks (ACM, IEEE, USENIX):
+When submitting code to conference **Artifact Evaluation** tracks (ACM, IEEE, NeurIPS, USENIX):
+
+> **Ready-to-use template:** See [Artifact Evaluation Submission Template](ARTIFACT_EVALUATION_TEMPLATE.md) for a complete, copy-pasteable appendix for your paper's code repository.
 
 1. Commit your `*.sciproof.json` manifest along with the code.
 2. In your `README.md` or artifact submission form, instruct reviewers to verify with:

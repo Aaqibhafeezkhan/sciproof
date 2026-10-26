@@ -51,6 +51,12 @@ const PAGES = [
     source: 'docs/RESEARCH.md',
     description: 'Reproducible research papers, LaTeX macro export, artifact evaluation, and reviewer verification.',
   },
+  {
+    slug: 'artifact-evaluation-template',
+    title: 'Artifact Evaluation Template',
+    source: 'docs/ARTIFACT_EVALUATION_TEMPLATE.md',
+    description: 'A copy-pasteable artifact evaluation appendix and reproducibility guide for paper repositories.',
+  },
   { slug: 'concepts', title: 'Concepts', source: 'docs/CONCEPTS.md', description: 'What SciProof can and cannot tell you.' },
   {
     slug: 'tutorial-numpy-pandas',

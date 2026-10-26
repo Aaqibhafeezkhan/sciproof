@@ -1,0 +1,25 @@
+name: Reproducibility Evidence Check
+
+# Drop this into your paper repository (.github/workflows/reproducibility.yml)
+# It automatically verifies your experiment manifest and publishes the SciProof badge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify Experiment Evidence
+        uses: hayagrivai-labs/sciproof@v0.4.1
+        with:
+          manifest: baseline.sciproof.json
+          # Optional: turn on rerun if your experiment runs quickly in CI:
+          # rerun: true
