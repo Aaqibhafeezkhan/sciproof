@@ -9,6 +9,7 @@ type: software
 authors:
   - name: "HayagrivAI Labs"
 version: 0.4.1
+doi: "10.5281/zenodo.23676138"
 date-released: 2026-10-27
 license: MIT
 repository-code: "https://github.com/hayagrivai-labs/sciproof"

@@ -106,7 +106,8 @@ If you use SciProof in a published paper or artifact submission, cite it using:
   author = {{HayagrivAI Labs}},
   title = {SciProof: Verifiable Computational Evidence and Reproducibility for Scientific Experiments},
   url = {https://hayagrivai-labs.github.io/sciproof/},
-  version = {0.4.0},
+  doi = {10.5281/zenodo.23676138},
+  version = {0.4.1},
   year = {2026}
 }
 ```
