@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-26
+
 * Contributing is easier: a dev container (GitHub Codespaces) with the dependencies installed, a short
   welcome for first issues and pull requests, `/take` to claim an issue labelled `help wanted`, and
   claims without activity for 21 days go back to the pool.
