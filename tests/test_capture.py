@@ -327,3 +327,17 @@ def test_unwritable_manifest_destination_raises_capture_error(project):
     (project.root / "unwritable.sciproof.json").mkdir()
     with pytest.raises(CaptureError, match="cannot write"):
         project.capture(name="unwritable", force=True)
+
+
+def test_numeric_output_cannot_be_a_directory(project):
+    # Issue sketch's match string ("numeric comparison cannot handle a directory")
+    # does not appear in the actual message on current main (see PR body);
+    # matched against the real message instead, without touching src/.
+    with pytest.raises(CaptureError, match="is a directory; --output-numeric compares single"):
+        project.capture(
+            name="test-run",
+            argv=[sys.executable, "-c", "import os; os.makedirs('out_dir', exist_ok=True)"],
+            numeric_outputs=["out_dir"],
+            outputs=[],
+        )
+    assert not project.manifest.exists()
