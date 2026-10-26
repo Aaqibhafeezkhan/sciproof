@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/sciproof.svg)](https://pypi.org/project/sciproof/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23676138.svg)](https://doi.org/10.5281/zenodo.23676138)
 [![Documentation](https://img.shields.io/badge/docs-website-blue.svg)](https://hayagrivai-labs.github.io/sciproof/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hayagrivai-labs/sciproof/blob/main/examples/quickstart.ipynb)
 [![Python](https://img.shields.io/pypi/pyversions/sciproof.svg)](https://pypi.org/project/sciproof/)
 [![Good first issues](https://img.shields.io/github/issues/hayagrivai-labs/sciproof/good%20first%20issue?color=7057ff&label=good%20first%20issues)](https://github.com/hayagrivai-labs/sciproof/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/hayagrivai-labs/sciproof/blob/main/LICENSE)
