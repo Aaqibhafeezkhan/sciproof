@@ -105,7 +105,8 @@ If you use SciProof in a published paper or artifact submission, cite it using:
 
 ```bibtex
 @software{sciproof,
-  author = {{HayagrivAI Labs}},
+  author = {Pandey, Alok and {HayagrivAI Labs}},
+  note = {ORCID: 0009-0007-7867-5939},
   title = {SciProof: Verifiable Computational Evidence and Reproducibility for Scientific Experiments},
   url = {https://hayagrivai-labs.github.io/sciproof/},
   doi = {10.5281/zenodo.23676138},

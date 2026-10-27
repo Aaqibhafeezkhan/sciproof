@@ -3,6 +3,7 @@
 [![CI](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml/badge.svg)](https://github.com/hayagrivai-labs/sciproof/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/sciproof.svg)](https://pypi.org/project/sciproof/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23676138.svg)](https://doi.org/10.5281/zenodo.23676138)
+[![ORCID](https://img.shields.io/badge/ORCID-0009--0007--7867--5939-A6CE39.svg)](https://orcid.org/0009-0007-7867-5939)
 [![Documentation](https://img.shields.io/badge/docs-website-blue.svg)](https://hayagrivai-labs.github.io/sciproof/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hayagrivai-labs/sciproof/blob/main/examples/quickstart.ipynb)
 [![Python](https://img.shields.io/pypi/pyversions/sciproof.svg)](https://pypi.org/project/sciproof/)

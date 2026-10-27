@@ -9,6 +9,7 @@ tags:
   - artifact evaluation
 authors:
   - name: Alok Pandey
+    orcid: 0009-0007-7867-5939
     affiliation: 1
 affiliations:
  - name: HayagrivAI Labs
