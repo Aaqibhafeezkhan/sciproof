@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from sciproof.runner import CommandNotRunnable, _resolve_batch_tool, run_command
+from sciproof.runner import CommandNotRunnable, CommandTimeout, _resolve_batch_tool, run_command
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason=".cmd lookup is Windows-only")
 
@@ -71,3 +71,13 @@ def test_other_platforms_never_rewrite_the_command(tmp_path):
 def test_a_missing_command_is_still_reported(tmp_path):
     with pytest.raises(CommandNotRunnable, match="nonexistent-tool-xyz"):
         run_command(["nonexistent-tool-xyz"], tmp_path, 30)
+
+
+def test_command_timeout_kills_process_and_raises(tmp_path):
+    with pytest.raises(CommandTimeout, match="did not finish within"):
+        run_command([sys.executable, "-c", "import time; time.sleep(5)"], tmp_path, timeout=0.1)
+
+
+def test_command_in_nonexistent_directory_raises(tmp_path):
+    with pytest.raises(CommandNotRunnable):
+        run_command([sys.executable, "-c", "pass"], tmp_path / "missing", timeout=30)
