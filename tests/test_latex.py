@@ -10,6 +10,7 @@ import pytest
 from sciproof import cli
 from sciproof.errors import SciProofError, UsageError
 from sciproof.latex import format_value, to_latex
+from sciproof.numeric import NumericFormatError
 
 RESULT = "out/result.json"
 
@@ -117,3 +118,23 @@ def test_cli_writes_a_file_and_refuses_to_mix_formats(project, capsys):
     assert "only used with --format latex" in capsys.readouterr().err
     assert cli.main(["export", project.manifest.name, "--format", "latex"]) == cli.EXIT_ERROR
     assert "at least one --value" in capsys.readouterr().err
+
+
+def test_more_than_the_maximum_number_of_values_is_refused(project):
+    project.capture()
+    values = [
+        ("v" + "".join(chr(97 + int(d)) for d in str(i)), RESULT, "$.value") for i in range(201)
+    ]
+    with pytest.raises(UsageError, match="at most 200"):
+        to_latex(project.manifest, values)
+
+
+def test_an_unreadable_numeric_output_is_reported_with_its_name(project, monkeypatch):
+    project.capture()
+
+    def unreadable(*args, **kwargs):
+        raise NumericFormatError("not valid JSON")
+
+    monkeypatch.setattr("sciproof.latex.load_numeric", unreadable)
+    with pytest.raises(SciProofError, match="result.json"):
+        to_latex(project.manifest, _values(("answer", RESULT, "$.value")))
