@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 
 import pytest
@@ -65,3 +66,32 @@ def test_the_current_interpreter_is_still_probed(tmp_path):
     info, source = interpreter_info(sys.executable, tmp_path)
     assert source == "command-interpreter"
     assert info["version"].count(".") == 2
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        subprocess.TimeoutExpired(cmd="python", timeout=1),
+        subprocess.CalledProcessError(returncode=1, cmd="python"),
+        OSError("Permission denied"),
+    ],
+    ids=["timeout", "nonzero-exit", "oserror"],
+)
+def test_interpreter_probe_failures_return_cleanly(tmp_path, monkeypatch, error):
+    fallback = {"version": "fallback"}
+    monkeypatch.setattr(environment, "_own_interpreter_info", lambda: fallback)
+    calls = []
+
+    def fail(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise error
+
+    monkeypatch.setattr(environment.subprocess, "run", fail)
+
+    info, source = interpreter_info(sys.executable, tmp_path)
+
+    assert info is fallback
+    assert source == "sciproof-process"
+    assert len(calls) == 1
+    assert calls[0][1]["timeout"] == environment.PROBE_TIMEOUT_SECONDS
+    assert calls[0][1]["check"] is True
