@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/sciproof.svg)](https://pypi.org/project/sciproof/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23676138.svg)](https://doi.org/10.5281/zenodo.23676138)
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0007--7867--5939-A6CE39.svg)](https://orcid.org/0009-0007-7867-5939)
+[![Awesome](https://img.shields.io/badge/Awesome-Reproducible%20Research-fc60a8?logo=awesomelists&logoColor=white)](https://github.com/leipzig/awesome-reproducible-research#development-resources)
 [![Documentation](https://img.shields.io/badge/docs-website-blue.svg)](https://hayagrivai-labs.github.io/sciproof/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hayagrivai-labs/sciproof/blob/main/examples/quickstart.ipynb)
 [![Python](https://img.shields.io/pypi/pyversions/sciproof.svg)](https://pypi.org/project/sciproof/)
@@ -14,7 +15,7 @@ Record a computational experiment once, then let anyone **check the evidence**: 
 unchanged, and does re-running the command give the recorded results, exactly or within a
 tolerance you declared?
 
-> **Status: 0.4.1.** Small, local-first, offline, zero runtime dependencies.
+> **Status: 0.4.1.** Small, local-first, offline, zero runtime dependencies. Listed in [Awesome Reproducible Research](https://github.com/leipzig/awesome-reproducible-research#development-resources).
 > See [For Researchers](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/RESEARCH.md) for paper reproducibility, artifact evaluation, and LaTeX integration.
 
 ## The problem
