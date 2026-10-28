@@ -32,6 +32,27 @@ nothing can be said. `INCONCLUSIVE` is never treated as success. See
 No. The project guidelines require that everything works offline, with no cloud accounts and no
 telemetry, and the package has no runtime dependencies (see [Contributing](../CONTRIBUTING.md)).
 
+## Can I complete subcommands and options in my shell?
+
+Install the optional completion extra in the environment that provides `sciproof`:
+
+```bash
+pip install 'sciproof[completion]'
+eval "$(register-python-argcomplete sciproof)"
+```
+
+The registration works in Bash and Zsh; add the `eval` line to `~/.bashrc` or
+`~/.zshrc` to keep it in new shells. Activate the same Python environment first,
+so both `sciproof` and `register-python-argcomplete` are on `PATH`.
+
+For example, `sciproof cap<TAB>` completes `capture`, `sciproof capture --out<TAB>`
+offers output flags, and `sciproof verify --format j<TAB>` offers `json` and `junit`.
+Completions come from the CLI parser, including subcommands, long options and
+declared choices. Completion stops before executing a SciProof command; it does
+not inspect or rerun a manifest. The ordinary installation needs no completion
+dependency. Bash and Zsh are supported by
+[argcomplete](https://kislyuk.github.io/argcomplete/); other shells are not covered here.
+
 ## Which tolerance should I choose?
 
 SciProof cannot tell you. The tolerance (`--rtol`, `--atol`) is chosen by you at capture time and

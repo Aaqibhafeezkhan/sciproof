@@ -6,6 +6,9 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+* Optional Bash/Zsh completion (`pip install 'sciproof[completion]'`) reads subcommands,
+  options and choices from the CLI parser, without executing a SciProof command.
+
 ## [0.4.1] - 2026-10-27
 
 * Added dedicated researcher guide (`docs/RESEARCH.md`) covering paper reproducibility, LaTeX macro exports, and artifact evaluation.

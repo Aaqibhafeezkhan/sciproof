@@ -1,3 +1,4 @@
+# PYTHON_ARGCOMPLETE_OK
 """Command line interface.
 
 Exit codes
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -771,6 +773,13 @@ def _make_output_robust() -> None:
 def main(argv: list[str] | None = None) -> int:
     _make_output_robust()
     parser = _build_parser()
+    if "_ARGCOMPLETE" in os.environ:
+        try:
+            import argcomplete
+        except ImportError:
+            pass  # Completion is an optional extra; the base CLI still works without it.
+        else:
+            argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
     try:
         if args.command_name == "capture":

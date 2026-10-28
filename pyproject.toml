@@ -55,7 +55,8 @@ Discussions = "https://github.com/hayagrivai-labs/sciproof/discussions"
 
 [project.optional-dependencies]
 numpy = ["numpy>=1.26"]
-dev = ["pytest>=8", "ruff>=0.5", "numpy>=1.26"]
+completion = ["argcomplete>=3"]
+dev = ["pytest>=8", "ruff>=0.5", "numpy>=1.26", "argcomplete>=3"]
 
 [project.scripts]
 sciproof = "sciproof.cli:main"
