@@ -183,6 +183,15 @@ def test_signing_reports_ssh_keygen_failures(project, tmp_path):
         sign_manifest(project.manifest, not_a_key)
 
 
+def test_signing_timeout_signature_error(signed, monkeypatch):
+    def mock_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=60)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    with pytest.raises(SignatureError, match="ssh-keygen could not be run"):
+        sign_manifest(signed.manifest, signed.key)
+
+
 def test_without_ssh_keygen_the_check_is_inconclusive(signed, monkeypatch):
     monkeypatch.setattr("sciproof.signing.ssh_keygen", lambda: None)
     result = check_signature(signed.manifest, signed.allowed)
