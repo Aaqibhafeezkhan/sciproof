@@ -261,6 +261,20 @@ def _diff_environment(old: dict[str, Any], new: dict[str, Any], report: DiffRepo
                 _versions(a["env_vars"][name], b["env_vars"][name]),
             )
     _diff_hardware(old, new, report)
+    locks_a = {item["path"]: item["sha256"] for item in a.get("lockfiles", [])}
+    locks_b = {item["path"]: item["sha256"] for item in b.get("lockfiles", [])}
+    for path in sorted(locks_a.keys() | locks_b.keys()):
+        if path not in locks_b:
+            report.add("environment", "removed", f"lockfile {path}", f"was {locks_a[path]}")
+        elif path not in locks_a:
+            report.add("environment", "added", f"lockfile {path}", f"is {locks_b[path]}")
+        elif locks_a[path] != locks_b[path]:
+            report.add(
+                "environment",
+                "changed",
+                f"lockfile {path}",
+                _versions(locks_a[path], locks_b[path]),
+            )
     if a.get("source") != b.get("source"):
         report.notes.append(
             "the two manifests describe the environment differently "

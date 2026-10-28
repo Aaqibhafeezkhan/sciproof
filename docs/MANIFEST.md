@@ -60,6 +60,7 @@ Every field of a manifest. Array entries are written as `[]`.
 | `environment.python` | Python version, implementation and byte order. |
 | `environment.platform` | Operating system name, release, machine type and platform string. |
 | `environment.env_vars` | Values of a fixed allowlist of non-secret environment variables that were set at capture time. |
+| `environment.lockfiles` | Optional array of `{path, sha256}` records for root `environment.yml`, `poetry.lock`, `requirements.txt` and `uv.lock`, sorted by path and hashed before execution. Empty when none exist; older manifests may omit it. Only hashes are stored, never contents. |
 | `dependencies` | Name and version of every package installed for that interpreter. |
 | `git` | Commit, branch and whether the working tree had uncommitted or untracked changes before the run; `null` outside a Git repository. |
 | `inputs` | Declared input files. |
@@ -84,6 +85,12 @@ Every field of a manifest. Array entries are written as `[]`.
 | `outputs[].compare.rtol` | Relative tolerance of a numeric output. |
 | `outputs[].compare.atol` | Absolute tolerance of a numeric output. |
 | `outputs[].compare.snapshot` | Path and SHA-256 of the copy of the output in `NAME.sciproof.d/`, which is compared with the rerun. |
+
+Lockfile metadata records dependency pins as evidence; it does not install packages or verify
+that the installed environment matches them. `diff` compares the recorded hashes under environment
+changes without reading the lockfiles again. Lockfiles are not declared inputs unless explicitly
+listed with `--input`. Directories with these names are ignored; a symlink outside the workspace
+is refused before execution.
 
 ## Note and hardware
 

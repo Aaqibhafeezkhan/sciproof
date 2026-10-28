@@ -314,6 +314,17 @@ def validate_manifest(data: Any) -> dict[str, Any]:
     _get(python, "version", str, "environment.python")
     _get(environment, "platform", dict, "environment")
     _get(environment, "env_vars", dict, "environment")
+    if "lockfiles" in environment:
+        lockfiles = _get(environment, "lockfiles", list, "environment")
+        seen_lockfiles: set[str] = set()
+        for index, record in enumerate(lockfiles):
+            where = f"environment.lockfiles[{index}]"
+            item = _as_dict(record, where)
+            path = _rel_path(_get(item, "path", str, where), f"{where}.path")
+            if path in seen_lockfiles:
+                raise _fail(where, f"duplicate lockfile path {path!r}")
+            seen_lockfiles.add(path)
+            _sha(_get(item, "sha256", str, where), f"{where}.sha256")
     _check_hardware(environment.get("hardware"), minor)
     _check_note(manifest.get("note"), minor)
 

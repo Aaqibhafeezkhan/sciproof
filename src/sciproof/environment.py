@@ -11,13 +11,36 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess  # noqa: S404  (used to ask the recorded interpreter for its version)
 import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
-from sciproof.errors import UsageError
+from sciproof.errors import CaptureError, UnsafePathError, UsageError
+from sciproof.hashing import sha256_file
+from sciproof.paths import resolve_inside
+
+LOCKFILE_NAMES = ("environment.yml", "poetry.lock", "requirements.txt", "uv.lock")
+
+
+def lockfile_hashes(base: Path) -> list[dict[str, str]]:
+    """Hash standard root lockfiles without copying their potentially private contents."""
+    records = []
+    for name in LOCKFILE_NAMES:
+        try:
+            path = resolve_inside(base, name)
+            try:
+                mode = path.stat().st_mode
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(mode):
+                records.append({"path": name, "sha256": sha256_file(path)[0]})
+        except (OSError, RuntimeError, UnsafePathError) as exc:
+            raise CaptureError(f"cannot record lockfile {name!r}: {exc}") from exc
+    return records
+
 
 # Variables that influence numerical or locale behaviour and are not secret.
 ENV_ALLOWLIST = (

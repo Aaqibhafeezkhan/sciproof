@@ -6,6 +6,9 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+* Record root lockfile SHA-256 hashes with the environment and show added, changed or removed
+  lockfiles in `sciproof diff`. Lockfile contents are never copied into the manifest.
+
 * Optional Bash/Zsh completion (`pip install 'sciproof[completion]'`) reads subcommands,
   options and choices from the CLI parser, without executing a SciProof command.
 

@@ -15,6 +15,7 @@ from sciproof.claims import claim_text, evaluate, parse_claim
 from sciproof.environment import (
     hardware_info,
     interpreter_info,
+    lockfile_hashes,
     platform_info,
     selected_env_vars,
 )
@@ -249,6 +250,7 @@ def capture(
 
     warnings: list[str] = []
     input_records = _hash_inputs(base, input_paths)
+    lockfiles = lockfile_hashes(base)
     input_directories = [r["path"] for r in input_records if r.get("kind") == "directory"]
     for relative in input_paths + exact_paths + numeric_paths:
         for directory in input_directories:
@@ -397,6 +399,7 @@ def capture(
                 },
                 "platform": platform_info(),
                 "env_vars": selected_env_vars(),
+                "lockfiles": lockfiles,
                 **({"hardware": hardware_info()} if record_hardware else {}),
             },
             "dependencies": [
