@@ -70,6 +70,12 @@ const PAGES = [
     source: 'docs/TUTORIAL_SHELL_PIPELINE.md',
     description: 'Record and verify a reproducible shell and awk data pipeline.',
   },
+  {
+    slug: 'tutorial-record',
+    title: 'Tutorial: from a script to CI',
+    source: 'docs/TUTORIAL_RECORD.md',
+    description: 'Discover files, verify a noisy fit, calibrate its tolerance and check evidence in CI.',
+  },
   { slug: 'manifest', title: 'Manifest format', source: 'docs/MANIFEST.md', description: 'The evidence manifest, field by field.' },
   { slug: 'exit-codes', title: 'Exit codes', source: 'docs/EXIT_CODES.md', description: 'Exit codes and verdicts of every command.' },
   { slug: 'python-api', title: 'Python API', source: 'docs/PYTHON_API.md', description: 'Capture and verify from Python: functions, types and stability.' },

@@ -1,5 +1,8 @@
 # Recording without declaring files: `sciproof record`
 
+New to the workflow? Follow the [script-to-CI tutorial](TUTORIAL_RECORD.md) for a complete
+standard-library example with real record, verify and calibrate output.
+
 ```bash
 sciproof record --name fit -- python fit.py
 ```

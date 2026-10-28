@@ -55,6 +55,7 @@ export default defineConfig({
             { label: 'Concepts', slug: 'docs/concepts' },
             { label: 'Tutorial: NumPy & pandas', slug: 'docs/tutorial-numpy-pandas' },
             { label: 'Tutorial: shell pipeline', slug: 'docs/tutorial-shell-pipeline' },
+            { label: 'Tutorial: from a script to CI', slug: 'docs/tutorial-record' },
           ],
         },
         {

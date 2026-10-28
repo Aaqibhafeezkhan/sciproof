@@ -159,6 +159,9 @@ the exact numeric comparison rules:
 
 A walkthrough with NumPy and pandas, including how to choose tolerances: [docs/TUTORIAL_NUMPY_PANDAS.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/TUTORIAL_NUMPY_PANDAS.md).
 
+From a standard-library script to CI with record, verify and calibrate:
+[docs/TUTORIAL_RECORD.md](https://github.com/hayagrivai-labs/sciproof/blob/main/docs/TUTORIAL_RECORD.md).
+
 ## Commands
 
 ```text
