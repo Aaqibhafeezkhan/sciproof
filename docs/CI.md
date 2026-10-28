@@ -36,6 +36,59 @@ JSON object with `name`, `result`, `checks`, `warnings` and `notes`.
 > Pin the actions you use to a commit SHA if your organisation requires it. The versions above
 > only illustrate the shape of the workflow.
 
+## Cross-platform matrix verification
+
+[`examples/matrix_verification.yml`](../examples/matrix_verification.yml) is a portable GitHub
+Actions template for checking one committed manifest on Ubuntu, macOS and Windows with Python 3.11,
+3.12 and 3.13 (nine jobs). Copy it to
+`.github/workflows/matrix_verification.yml`, then replace every occurrence of
+`baseline.sciproof.json` with the path to your committed manifest.
+
+The template runs on `push` to `main` and `pull_request`. It uses read-only
+`permissions: contents: read`, disables persisted checkout credentials, and has no secrets. Its
+default command is integrity verification:
+
+```bash
+sciproof verify baseline.sciproof.json
+```
+
+This compares recorded artifacts but does **not** execute the experiment. Passing all nine jobs
+only shows that the listed integrity checks passed on those runners; it does not establish
+cross-platform numerical reproducibility.
+
+To re-execute a trusted experiment, opt in explicitly in a job that has no secrets and uses only
+read-only permissions:
+
+```bash
+sciproof verify baseline.sciproof.json --rerun --yes --clean-env
+```
+
+This executes the command recorded in the manifest. Only use it for manifests your team trusts;
+see [Re-running in CI](#re-running-in-ci).
+
+### Platform-specific numerical deviations
+
+Different operating systems, Python versions, hardware, and library builds can produce valid
+floating-point differences. First investigate a trusted manifest on each environment where it
+will run:
+
+```bash
+sciproof calibrate baseline.sciproof.json --runs 10 --yes
+```
+
+Calibration executes the recorded experiment repeatedly, so only calibrate manifests you trust.
+It measures variation in the environment where it runs, restores declared outputs afterwards, and
+does not modify the manifest. Its suggested tolerance is a starting point, not an automatically
+valid cross-platform tolerance or scientific judgement. Review it scientifically, then deliberately
+capture and document suitable numeric-output `rtol`/`atol` tolerances in the manifest. See
+[Choosing a tolerance](CALIBRATE.md).
+
+`sciproof verify baseline.sciproof.json --rerun --yes --strict-env` reports `INCONCLUSIVE` instead
+of attempting a rerun when the recorded and current platform, Python version, package versions, or
+other recorded environment details differ. Do not use `--strict-env` when intentionally comparing
+reruns across different matrix platforms; review environment warnings and numeric differences
+instead.
+
 ## Pre-commit
 
 SciProof publishes pre-commit hooks for checking manifests before they are committed. Add this to
