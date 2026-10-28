@@ -268,3 +268,73 @@ def test_capture_verify_rerun_with_numeric_tsv(project, capsys):
     assert cli.main(["verify", "exp_tsv.sciproof.json", "--rerun", "--yes"]) == cli.EXIT_OK
     out = capsys.readouterr().out
     assert "RESULT: PASS" in out
+
+
+def test_verify_quiet_flag_minimal_stdout_on_pass(project, capsys):
+    cli.main(_capture_args())
+    capsys.readouterr()
+
+    assert cli.main(["verify", "exp.sciproof.json", "-q"]) == cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "RESULT: PASS"
+    assert captured.err == ""
+    assert "SciProof verification of" not in captured.out
+
+    assert cli.main(["-q", "verify", "exp.sciproof.json"]) == cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "RESULT: PASS"
+    assert captured.err == ""
+
+
+def test_verify_quiet_flag_failure_diagnostics_on_stderr(project, capsys):
+    cli.main(_capture_args())
+    capsys.readouterr()
+
+    (project.root / "out" / "exact.txt").write_text("changed")
+    assert cli.main(["verify", "exp.sciproof.json", "-q"]) == cli.EXIT_FAIL
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "RESULT: FAIL"
+    assert "exact.txt" in captured.err
+    assert "basis:" in captured.err
+    assert "SciProof verification of" not in captured.out
+
+
+def test_record_quiet_flag_minimal_stdout(project, capsys):
+    script = "import pathlib; pathlib.Path('out.txt').write_text('hi')"
+    code = cli.main(["record", "--name", "rec_q", "-q", "--", sys.executable, "-c", script])
+    assert code == cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "Evidence written to rec_q.sciproof.json"
+    assert "Equivalent command" not in captured.out
+    assert "inputs found" not in captured.out
+
+
+def test_diff_quiet_flag_minimal_stdout(project, capsys):
+    cli.main(_capture_args(name="exp_a"))
+    capsys.readouterr()
+
+    assert cli.main(["diff", "exp_a.sciproof.json", "exp_a.sciproof.json", "-q"]) == cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "RESULT: IDENTICAL"
+    assert captured.err == ""
+
+    # Create a different manifest
+    (project.root / "data.json").write_text('{"x": 999}')
+    cli.main(_capture_args("--force", name="exp_b"))
+    capsys.readouterr()
+
+    assert cli.main(["diff", "exp_a.sciproof.json", "exp_b.sciproof.json", "-q"]) == cli.EXIT_FAIL
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "RESULT: DIFFERENT"
+    assert "summary:" in captured.err
+
+
+def test_calibrate_quiet_flag_minimal_stdout(project, capsys):
+    cli.main(_capture_args())
+    capsys.readouterr()
+
+    assert cli.main(["calibrate", "exp.sciproof.json", "--runs", "2", "--yes", "-q"]) == cli.EXIT_OK
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "RESULT: STABLE"
+    assert "SciProof calibration of" not in captured.out
+    assert captured.err == ""

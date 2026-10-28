@@ -31,7 +31,9 @@ jobs:
 
 The job fails when the verdict is `FAIL` (exit code `1`), `INCONCLUSIVE` (`2`) or the manifest
 is invalid (`3`); see [Exit codes](EXIT_CODES.md). With `--json` the report on stdout is a single
-JSON object with `name`, `result`, `checks`, `warnings` and `notes`.
+JSON object with `name`, `result`, `checks`, `warnings` and `notes`. With `--quiet` / `-q`,
+decorative headers are suppressed and only the final verdict (`RESULT: PASS` / `RESULT: FAIL`) is
+printed on stdout, while failure diagnostics go to stderr.
 
 > Pin the actions you use to a commit SHA if your organisation requires it. The versions above
 > only illustrate the shape of the workflow.

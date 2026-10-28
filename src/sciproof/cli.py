@@ -74,6 +74,13 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Record computational experiments and create verifiable evidence for them.",
     )
     parser.add_argument("--version", action="version", version=f"sciproof {__version__}")
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="minimal terminal output: suppress banners and decorative headers",
+    )
     sub = parser.add_subparsers(dest="command_name", required=True)
 
     cap = sub.add_parser(
@@ -245,6 +252,13 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="also write the JSON report to this file (whatever --format prints)",
     )
+    ver.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="minimal terminal output: suppress banners and decorative headers",
+    )
 
     sug = sub.add_parser(
         "suggest-inputs",
@@ -318,6 +332,13 @@ def _build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--note", metavar="TEXT", help="free text stored in the manifest")
     rec.add_argument("--record-hardware", action="store_true")
     rec.add_argument("--force", action="store_true", help="overwrite an existing manifest")
+    rec.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="minimal terminal output: suppress banners and decorative headers",
+    )
     rec.add_argument("cmd", nargs=argparse.REMAINDER, metavar="-- COMMAND [ARGS...]")
 
     upd = sub.add_parser(
@@ -353,6 +374,13 @@ def _build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--timeout", type=float, default=None, metavar="SECONDS", help="per run")
     cal.add_argument("--format", choices=("text", "json"), help="report format (default: text)")
     cal.add_argument("--json", action="store_true", help="same as --format json")
+    cal.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="minimal terminal output: suppress banners and decorative headers",
+    )
 
     dif = sub.add_parser(
         "diff",
@@ -367,6 +395,13 @@ def _build_parser() -> argparse.ArgumentParser:
     dif.add_argument("new", type=Path, help="the manifest to compare with it")
     dif.add_argument("--json", action="store_true", help="same as --format json")
     dif.add_argument("--format", choices=("text", "json", "markdown"), default=None)
+    dif.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="minimal terminal output: suppress banners and decorative headers",
+    )
 
     lst = sub.add_parser(
         "list",
@@ -673,23 +708,34 @@ def _run_record(args: argparse.Namespace) -> int:
     )
     for warning in result.capture.warnings:
         print(f"warning: {warning}", file=sys.stderr)
-    print(f"Evidence written to {result.capture.manifest_path.name}")
-    print(f"  inputs found:   {len(result.inputs)}")
-    print(f"  outputs, exact: {len(result.exact)}")
-    print(f"  outputs, numeric: {len(result.numeric)}")
-    for path, settings in sorted(result.tolerances.items()):
-        shown = " ".join(f"{k}={v:g}" for k, v in settings.items())
-        print(f"    {safe_text(path)}: varies between runs, tolerance {shown}")
-    for path, reason in result.excluded:
-        print(f"  NOT declared: {safe_text(path)} ({safe_text(reason, 200)})")
-    for note in result.notes:
-        print(f"  note: {safe_text(note, 300)}")
-    print()
-    print("Equivalent command (commit it, or run it again later):")
-    print(f"  {safe_text(result.command_line, 4000)}")
-    print("Check the list above: only files that Python opened are detected as inputs.")
-    if result.tolerances:
-        print("The tolerances come from two runs; 'sciproof calibrate' measures them with more.")
+    if getattr(args, "quiet", False):
+        print(f"Evidence written to {result.capture.manifest_path.name}")
+        if result.capture.exit_code != 0:
+            print(
+                f"The command failed (exit code {result.capture.exit_code}); "
+                "the failure was recorded.",
+                file=sys.stderr,
+            )
+    else:
+        print(f"Evidence written to {result.capture.manifest_path.name}")
+        print(f"  inputs found:   {len(result.inputs)}")
+        print(f"  outputs, exact: {len(result.exact)}")
+        print(f"  outputs, numeric: {len(result.numeric)}")
+        for path, settings in sorted(result.tolerances.items()):
+            shown = " ".join(f"{k}={v:g}" for k, v in settings.items())
+            print(f"    {safe_text(path)}: varies between runs, tolerance {shown}")
+        for path, reason in result.excluded:
+            print(f"  NOT declared: {safe_text(path)} ({safe_text(reason, 200)})")
+        for note in result.notes:
+            print(f"  note: {safe_text(note, 300)}")
+        print()
+        print("Equivalent command (commit it, or run it again later):")
+        print(f"  {safe_text(result.command_line, 4000)}")
+        print("Check the list above: only files that Python opened are detected as inputs.")
+        if result.tolerances:
+            print(
+                "The tolerances come from two runs; 'sciproof calibrate' measures them with more."
+            )
     if result.capture.exit_code != 0:
         return EXIT_FAIL
     return EXIT_OK
@@ -712,9 +758,27 @@ def _run_calibrate(args: argparse.Namespace) -> int:
             text = json.dumps(report.to_dict(), indent=2, allow_nan=False)
         except ValueError as exc:
             raise UsageError("calibration report contains a non-finite number") from exc
+        print(text)
+    elif getattr(args, "quiet", False):
+        print(f"RESULT: {'STABLE' if report.ok else 'VARIES'}")
+        if not report.ok:
+            wrong = sorted({c for c in report.exit_codes if c != report.recorded_exit_code})
+            if wrong:
+                print(
+                    f"  [DIFFERS] exit code: {', '.join(map(str, wrong))} in some runs, "
+                    f"recorded {report.recorded_exit_code}",
+                    file=sys.stderr,
+                )
+            for output in report.outputs:
+                if not output.ok:
+                    print(
+                        f"  [DIFFERS] {safe_text(output.path)} ({output.mode}): "
+                        f"{safe_text(output.message, 600)}",
+                        file=sys.stderr,
+                    )
     else:
         text = report.to_text()
-    print(text)
+        print(text)
     return EXIT_OK if report.ok else EXIT_FAIL
 
 
@@ -725,6 +789,10 @@ def _run_diff(args: argparse.Namespace) -> int:
         print(format_diff_json(report))
     elif output_format == "markdown":
         print(report.to_markdown())
+    elif getattr(args, "quiet", False):
+        print("RESULT: IDENTICAL" if report.identical else "RESULT: DIFFERENT")
+        if not report.identical:
+            print(f"summary: {report.summary}", file=sys.stderr)
     else:
         print(report.to_text())
     return EXIT_OK if report.identical else EXIT_FAIL
@@ -750,6 +818,17 @@ def _run_verify(args: argparse.Namespace) -> int:
         print(report.to_markdown())
     elif output_format == "junit":
         print(report_junit(report), end="")
+    elif getattr(args, "quiet", False):
+        print(f"RESULT: {report.status.value}")
+        if report.status is not Status.PASS:
+            for check in report.checks:
+                if check.status is not Status.PASS:
+                    sub = safe_text(check.subject)
+                    msg = safe_text(check.message, 2000)
+                    print(f"  [{check.status.value}] {sub}: {msg}", file=sys.stderr)
+            for warning in report.warnings:
+                print(f"  warning: {safe_text(warning, 2000)}", file=sys.stderr)
+            print(f"  basis: {report.reason}", file=sys.stderr)
     else:
         print(format_report(report))
     if args.save_json is not None:  # after the verdict is printed, so a bad path never hides it
