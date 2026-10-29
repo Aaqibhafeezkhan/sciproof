@@ -54,7 +54,9 @@ jobs:
           * GitHub holds the checks of a first pull request until a maintainer approves them, so the CI results appear a little later; nothing is wrong on your side.
           * You can run the same checks locally: \`ruff format .\`, \`ruff check .\` and \`python -m pytest\` (see [CONTRIBUTING.md](https://github.com/${REPO}/blob/main/CONTRIBUTING.md)).
 
-          A maintainer reads every pull request. A round or two of small changes is normal for a first one."
+          A maintainer reads every pull request. A round or two of small changes is normal for a first one.
+
+          ⭐ If you find SciProof useful or enjoy contributing, consider dropping a star on the repository to help other researchers discover it!"
 
   take-issue:
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request && startsWith(github.event.comment.body, '/take')
