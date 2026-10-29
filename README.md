@@ -336,6 +336,14 @@ Nothing to install: [open it in Codespaces](https://codespaces.new/hayagrivai-la
 See [CONTRIBUTING.md](https://github.com/hayagrivai-labs/sciproof/blob/main/CONTRIBUTING.md). Quick checks: `ruff check .`, `ruff format --check .`,
 `python -m pytest`, `python examples/demo.py`.
 
+## Contributors
+
+Thank you to everyone who has contributed to SciProof!
+
+<a href="https://github.com/hayagrivai-labs/sciproof/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=hayagrivai-labs/sciproof" alt="SciProof Contributors" />
+</a>
+
 ## Licence
 
 [MIT](https://github.com/hayagrivai-labs/sciproof/blob/main/LICENSE): short and permissive, so researchers and companies can use and embed it
