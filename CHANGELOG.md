@@ -6,6 +6,20 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-30
+
+* **RO-Crate 1.3 / Process Run Crate 0.6 Exporter:** Native export to standards-compliant JSON-LD (`sciproof export --format ro-crate`).
+* **NumPy `.npz` Multi-Array Archives:** Full element-wise and per-array numerical tolerance comparison for compressed multi-array containers (`src/sciproof/numeric.py`).
+* **Dynamic Input/Output Globs:** Safe pattern expansion for inputs and outputs (e.g. `--input "data/*.csv"` and `--output "shards/*.bin"`).
+* **Smart Auto-Collapsing Directory Outputs:** In `sciproof record`, newly created directories with all-stable files automatically collapse into `--output DIR` instead of generating hundreds of single-file flags (#124).
+* **Multi-Seed Monte Carlo Calibration:** `sciproof calibrate --seeds 42,43,44,45` samples stochastic seed variance, measures floating-point noise, and calculates empirical sample Mean $\mu$ and Standard Deviation $\sigma$ for research manuscripts.
+* **Interactive HTML Verification Report:** Single-file self-contained HTML verification report with dark mode and visual tolerance meters (`verify --format html`).
+* **SARIF 2.1.0 Exporter:** Native export for GitHub code scanning and security alerts (`verify --format sarif`).
+* **Pytest Zero-Config Plugin:** Auto-discovery of manifests as pytest test cases via entry point (`pytest --sciproof`).
+* **GIL-Free Multithreaded Tree Hashing:** High-speed parallel SHA-256 directory hashing in `treehash.py`.
+* **Smart LaTeX Auto-Export:** Zero-argument LaTeX macro export (`sciproof export <manifest> --format latex`) automatically exporting all numerical leaf values.
+* **JOSS Paper Alignment:** Paper documentation (`paper/paper.md`) synchronized with CLI flags and runtime implementation.
+
 * Record root lockfile SHA-256 hashes with the environment and show added, changed or removed
   lockfiles in `sciproof diff`. Lockfile contents are never copied into the manifest.
 
