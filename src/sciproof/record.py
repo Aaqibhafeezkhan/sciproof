@@ -122,6 +122,68 @@ def _snapshot(base: Path) -> dict[str, tuple[int, int]]:
     return found
 
 
+def _existing_directories(base: Path) -> set[str]:
+    """Relative paths of directories that exist before the run (POSIX format, no trailing slash)."""
+    dirs: set[str] = set()
+    for current, directories, _ in os.walk(base, followlinks=False):
+        rel = Path(current).relative_to(base)
+        dirs.update((rel / d).as_posix() for d in directories if not _ignored((*rel.parts, d)))
+    return dirs
+
+
+def _collapse_directories(
+    base: Path,
+    exact: list[str],
+    numeric: list[str],
+    excluded: list[tuple[str, str]],
+    pre_existing_dirs: set[str],
+) -> list[str]:
+    """Collapse newly created directories into single directory entries when ALL files are exact."""
+    numeric_set = set(numeric)
+    excluded_set = {p for p, _ in excluded}
+
+    candidate_dirs: set[str] = set()
+    for p in exact:
+        parts = p.split("/")
+        for i in range(1, len(parts)):
+            candidate_dirs.add("/".join(parts[:i]))
+
+    valid_dirs: set[str] = set()
+    for d in candidate_dirs:
+        if d in pre_existing_dirs:
+            continue
+        prefix = d + "/"
+        if any(num.startswith(prefix) for num in numeric_set):
+            continue
+        if any(exc.startswith(prefix) for exc in excluded_set):
+            continue
+        valid_dirs.add(d)
+
+    if not valid_dirs:
+        return exact
+
+    sorted_dirs = sorted(valid_dirs, key=lambda x: (x.count("/"), len(x)))
+    topmost_dirs: list[str] = []
+    for d in sorted_dirs:
+        if not any(d == top or d.startswith(top + "/") for top in topmost_dirs):
+            topmost_dirs.append(d)
+
+    new_exact: list[str] = []
+    covered_files: set[str] = set()
+    for d in topmost_dirs:
+        prefix = d + "/"
+        files_under = [p for p in exact if p.startswith(prefix)]
+        if len(files_under) >= 2:
+            new_exact.append(d)
+            covered_files.update(files_under)
+
+    for p in exact:
+        if p not in covered_files:
+            new_exact.append(p)
+
+    return sorted(new_exact)
+
+
 def _changed(
     before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]
 ) -> tuple[list[str], list[str]]:
@@ -205,6 +267,7 @@ def record(
         return any(relative == s or relative.startswith(s + "/") for s in skipped)
 
     before = _snapshot(base)
+    pre_existing_dirs = _existing_directories(base)
     found = suggest_inputs(argv, base, [], timeout)
     if found.exit_code != 0:
         raise _failed("first", found.exit_code, found.stderr, "record needs a run that succeeds")
@@ -283,11 +346,18 @@ def record(
                     numeric.append(relative)
                     tolerances[relative] = {"rtol": rtol}
 
+    exact = _collapse_directories(base, exact, numeric, excluded, pre_existing_dirs)
     declared_outputs = set(exact) | set(numeric)
     never_inputs = set(first_digest) | set(second_digest)
     detected = [p for p in found.inside if p not in never_inputs and not is_skipped(p)]
     chosen_inputs = sorted(
-        {p for p in detected + extra_inputs if (base / p).is_file() and p not in declared_outputs}
+        {
+            p
+            for p in detected + extra_inputs
+            if (base / p).is_file()
+            and p not in declared_outputs
+            and not any(p == d or p.startswith(d + "/") for d in exact if (base / d).is_dir())
+        }
     )
     if not found.hook_loaded:
         notes.append(

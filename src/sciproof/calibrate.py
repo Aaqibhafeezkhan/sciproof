@@ -54,6 +54,7 @@ class OutputSpread:
     max_rel: float = 0.0
     suggestion: str | None = None
     suggested_rtol: float | None = None
+    mean_std: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -84,6 +85,10 @@ class CalibrationReport:
                 item.update(max_abs=output.max_abs, max_rel=output.max_rel)
             if output.suggested_rtol is not None:
                 item["suggestion"] = {"rtol": output.suggested_rtol}
+            if output.mean_std:
+                item["stats"] = {
+                    loc: {"mean": mean, "std": std} for loc, (mean, std) in output.mean_std.items()
+                }
             outputs.append(item)
         return {
             "schema": "sciproof.calibration",
@@ -117,6 +122,9 @@ class CalibrationReport:
             )
             if output.suggestion:
                 lines.append(f"           suggestion: {safe_text(output.suggestion, 300)}")
+            if output.mean_std:
+                for loc, (mean, std) in sorted(output.mean_std.items()):
+                    lines.append(f"           {loc}: mean = {mean:.4g} ± {std:.4g}")
         lines.append("")
         lines.extend(f"  note: {note}" for note in self.notes)
         lines.append("")
@@ -206,6 +214,7 @@ def calibrate(
     manifest_path: Path | str,
     *,
     runs: int = 5,
+    seeds: list[int] | None = None,
     assume_yes: bool = False,
     confirm: Callable[[str], bool] | None = None,
     timeout: float | None = None,
@@ -215,6 +224,8 @@ def calibrate(
     Returns ``None`` if the confirmation was declined (nothing ran). Raises
     ``ConfirmationRequired`` without ``assume_yes`` or a ``confirm`` callback.
     """
+    if seeds is not None:
+        runs = len(seeds)
     if not MIN_RUNS <= runs <= MAX_RUNS:
         raise UsageError(f"--runs must be between {MIN_RUNS} and {MAX_RUNS}")
     manifest_path = Path(manifest_path).resolve()
@@ -251,8 +262,16 @@ def calibrate(
         backup = Path(scratch)
         moved = _backup_and_remove(base, paths, backup)
         try:
-            for _ in range(runs):
-                result = run_command(argv, base, timeout)
+            import os
+
+            for run_idx in range(runs):
+                env = None
+                if seeds:
+                    s = str(seeds[run_idx])
+                    env = dict(os.environ)
+                    env["SEED"] = s
+                    env["PYTHONHASHSEED"] = s
+                result = run_command(argv, base, timeout, env=env)
                 exit_codes.append(result.exit_code)
                 for item in items:
                     path = item["path"]
@@ -335,6 +354,7 @@ def _judge(
     suggested_rtol = _round_up(max_rel * SAFETY_FACTOR) if outside else None
     suggestion = f"--tolerance {path} 'rtol={suggested_rtol:.0e}'" if outside else None
     detail = f"varies by up to {max_rel:.3g} relative ({max_abs:.3g} absolute)"
+    mean_std = _compute_mean_std(samples)
     if outside:
         return OutputSpread(
             path,
@@ -346,6 +366,7 @@ def _judge(
             max_rel,
             suggestion,
             suggested_rtol,
+            mean_std=mean_std,
         )
     return OutputSpread(
         path,
@@ -354,4 +375,20 @@ def _judge(
         f"{detail}; inside the recorded tolerance (rtol={rtol}, atol={atol})",
         max_abs,
         max_rel,
+        mean_std=mean_std,
     )
+
+
+def _compute_mean_std(samples: list[list[Leaf]]) -> dict[str, tuple[float, float]]:
+    mean_std: dict[str, tuple[float, float]] = {}
+    tables = [dict(s) for s in samples]
+    if len(tables) >= 2:
+        all_keys = {k for t in tables for k in t}
+        for k in sorted(all_keys):
+            nums = [_number(t[k]) for t in tables if k in t and _number(t[k]) is not None]
+            if len(nums) >= 2:
+                mean = sum(nums) / len(nums)
+                variance = sum((x - mean) ** 2 for x in nums) / (len(nums) - 1)
+                std = math.sqrt(variance)
+                mean_std[k] = (mean, std)
+    return mean_std

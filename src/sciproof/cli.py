@@ -457,6 +457,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     cal.add_argument("--runs", type=int, default=5, metavar="N", help="2 to 50 (default 5)")
 
+    cal.add_argument(
+        "--seeds",
+        metavar="SEEDS",
+        help="comma-separated random seeds for Monte Carlo sampling (e.g. 42,43,44)",
+    )
+
     cal.add_argument("--yes", action="store_true", help="do not ask for confirmation")
 
     cal.add_argument("--timeout", type=float, default=None, metavar="SECONDS", help="per run")
@@ -970,9 +976,21 @@ def _run_calibrate(args: argparse.Namespace) -> int:
 
     output_format = _report_format(args)
 
+    seeds = None
+    if getattr(args, "seeds", None):
+        try:
+            seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+        except ValueError as exc:
+            raise UsageError(
+                "--seeds must be a comma-separated list of integers, e.g. 42,43,44"
+            ) from exc
+        if len(seeds) < 2:
+            raise UsageError("--seeds must specify at least 2 seeds")
+
     report = calibrate(
         args.manifest,
         runs=args.runs,
+        seeds=seeds,
         assume_yes=args.yes,
         confirm=_confirm if not args.yes else None,
         timeout=args.timeout,
