@@ -1,76 +1,116 @@
-name: 'SciProof Verification'
-description: 'Verify computational experiment reproducibility manifests and report SARIF/JUnit alerts'
-author: 'HayagrivAI Labs'
+name: "SciProof verify"
+description: "Verify experiment evidence recorded with SciProof: file hashes, re-execution, claims, signatures, policy."
+author: "HayagrivAI Labs"
 branding:
-  icon: 'check-circle'
-  color: 'green'
+  icon: "check-circle"
+  color: "green"
+
+# Re-executing a manifest runs the command it contains with the job's permissions. `rerun` is off
+# by default; turn it on only for manifests that your own team committed to a protected branch,
+# never for manifests that come from a pull request. See docs/CI.md.
 
 inputs:
   manifest:
-    description: 'Path to .sciproof.json manifest file or directory to check'
-    required: false
-    default: '.'
+    description: "Path of the .sciproof.json manifest to verify."
+    required: true
   rerun:
-    description: 'Execute the recorded command again in sandbox to verify outputs'
-    required: false
-    default: 'false'
-  format:
-    description: 'Output format (text, json, markdown, junit, sarif, html)'
-    required: false
-    default: 'sarif'
-  sarif-file:
-    description: 'File path to write SARIF output'
-    required: false
-    default: 'sciproof.sarif'
-  strict-env:
-    description: 'Fail if execution environment differs during rerun'
-    required: false
-    default: 'false'
+    description: "Re-execute the recorded command and compare the results (runs the manifest's command)."
+    default: "false"
+  clean-env:
+    description: "With rerun: give the command a minimal environment instead of the job's (recommended)."
+    default: "true"
+  allowed-signers:
+    description: "Path of an OpenSSH allowed-signers file; also checks the manifest's .sig signature."
+    default: ""
   policy:
-    description: 'Optional path to policy TOML file to enforce rules'
-    required: false
-    default: ''
+    description: "Path of a SciProof policy file (TOML) to check against the evidence."
+    default: ""
+  working-directory:
+    description: "Directory in which to run; the manifest and the other paths are relative to it."
+    default: "."
+  install:
+    description: >-
+      Install SciProof from PyPI (and set up Python). Set to "false" if the job has already
+      installed it.
+    default: "true"
+  version:
+    description: "SciProof version to install, for example 0.4.1 (this action needs 0.3.0 or later). Empty means the latest release."
+    default: ""
+  python-version:
+    description: "Python version to set up when install is true."
+    default: "3.12"
 
 outputs:
-  verdict:
-    description: 'Final verification verdict (PASS, FAIL, INCONCLUSIVE)'
-    value: ${{ steps.verify.outputs.verdict }}
+  result:
+    description: "PASS, FAIL or INCONCLUSIVE (ERROR if SciProof could not run)."
+    value: ${{ steps.verify.outputs.result }}
+  report:
+    description: "Path of the JSON report (schema sciproof.report)."
+    value: ${{ steps.verify.outputs.report }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      if: inputs.install == 'true'
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
-        python-version: '>=3.11'
+        python-version: ${{ inputs.python-version }}
 
     - name: Install SciProof
+      if: inputs.install == 'true'
       shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
       run: |
-        python -m pip install --upgrade pip
-        pip install .
+        if [ -n "$VERSION" ]; then
+          python -m pip install --quiet --disable-pip-version-check "sciproof==$VERSION"
+        else
+          python -m pip install --quiet --disable-pip-version-check sciproof
+        fi
+        sciproof --version
 
-    - name: Run SciProof Verification
+    - name: Verify
       id: verify
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        MANIFEST: ${{ inputs.manifest }}
+        RERUN: ${{ inputs.rerun }}
+        CLEAN_ENV: ${{ inputs.clean-env }}
+        SIGNERS: ${{ inputs.allowed-signers }}
+        POLICY: ${{ inputs.policy }}
       run: |
-        FLAGS=""
-        if [ "${{ inputs.rerun }}" = "true" ]; then
-          FLAGS="$FLAGS --rerun --yes"
-        fi
-        if [ "${{ inputs.strict-env }}" = "true" ]; then
-          FLAGS="$FLAGS --strict-env"
-        fi
-        if [ -n "${{ inputs.policy }}" ]; then
-          FLAGS="$FLAGS --policy ${{ inputs.policy }}"
-        fi
+        # Inputs reach the shell only through the environment above, never through string
+        # interpolation into this script.
+        report="${RUNNER_TEMP}/sciproof-report.json"
+        rm -f "$report"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
 
-        if [[ -f "${{ inputs.manifest }}" ]]; then
-          echo "Verifying manifest: ${{ inputs.manifest }}"
-          python -m sciproof verify "${{ inputs.manifest }}" --format ${{ inputs.format }} $FLAGS > "${{ inputs.sarif-file }}" || EXIT_CODE=$?
-          echo "verdict=$(python -m sciproof verify "${{ inputs.manifest }}" --quiet $FLAGS || true)" >> "$GITHUB_OUTPUT"
-          exit ${EXIT_CODE:-0}
-        else
-          echo "Checking all manifests in directory: ${{ inputs.manifest }}"
-          python -m sciproof list "${{ inputs.manifest }}" --check
+        # This action writes the JSON report with --save-json, which SciProof 0.3.0 introduced.
+        if ! sciproof verify --help 2>/dev/null | grep -q -e '--save-json'; then
+          echo "result=ERROR" >> "$GITHUB_OUTPUT"
+          echo "::error title=SciProof is too old::this version of the action needs SciProof 0.3.0 or later, found $(sciproof --version 2>&1). Leave the 'version' input empty or use 0.3.0 or later."
+          exit 3
         fi
+        args=(verify "$MANIFEST" --format markdown --save-json "$report")
+        if [ "$RERUN" = "true" ]; then
+          args+=(--rerun --yes)
+          if [ "$CLEAN_ENV" = "true" ]; then args+=(--clean-env); fi
+        fi
+        if [ -n "$SIGNERS" ]; then args+=(--allowed-signers "$SIGNERS"); fi
+        if [ -n "$POLICY" ]; then args+=(--policy "$POLICY"); fi
+
+        set +e
+        sciproof "${args[@]}" >> "$GITHUB_STEP_SUMMARY"
+        code=$?
+        set -e
+
+        result=ERROR
+        if [ -s "$report" ]; then
+          result=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["result"])' "$report" || echo ERROR)
+        fi
+        echo "result=$result" >> "$GITHUB_OUTPUT"
+        echo "SciProof result: $result (exit status $code)"
+        # 0 = PASS, 1 = FAIL, 2 = INCONCLUSIVE, 3 = error: the step fails unless it is a PASS
+        exit "$code"
