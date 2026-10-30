@@ -61,6 +61,9 @@ dev = ["pytest>=8", "ruff>=0.5", "numpy>=1.26", "argcomplete>=3", "hypothesis>=6
 [project.scripts]
 sciproof = "sciproof.cli:main"
 
+[project.entry-points.pytest11]
+sciproof = "sciproof.pytest_plugin"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

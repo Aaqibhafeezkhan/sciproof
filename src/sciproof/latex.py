@@ -86,15 +86,70 @@ def _read(base: Path, output: str, location: str, cache: dict[str, dict[str, obj
     return leaves[location]
 
 
-def to_latex(manifest_path: Path | str, values: list[tuple[str, str, str]]) -> str:
+def _auto_macro_name(location: str, output_path: str, existing: set[str]) -> str:
+    raw = location.removeprefix("$.")
+    parts = [p for p in re.split(r"[^A-Za-z0-9]+", raw) if p]
+    candidate = "".join(part.capitalize() for part in parts)
+    stem_parts = [p for p in re.split(r"[^A-Za-z0-9]+", Path(output_path).stem) if p]
+    stem = "".join(p.capitalize() for p in stem_parts)
+    if not candidate or candidate[0].isdigit():
+        candidate = f"{stem}{candidate}"
+    letters = re.sub(r"[^A-Za-z]", "", candidate)[:35]
+    if not letters:
+        letters = f"{stem}Value"[:35]
+    if not letters:
+        letters = "Metric"
+    name = letters
+    counter = 1
+    while name in existing or not MACRO_NAME.fullmatch(name):
+        name = f"{letters[:30]}{counter}"
+        counter += 1
+    existing.add(name)
+    return name
+
+
+def to_latex(manifest_path: Path | str, values: list[tuple[str, str, str]] | None = None) -> str:
     """``\\newcommand`` lines for ``values`` (``(macro name, output file, location)``).
 
+    If ``values`` is None, all numeric leaves in declared outputs are automatically exported.
     Raises ``SciProofError`` unless the integrity verification of the manifest is ``PASS`` and every
     value can be read. Nothing is executed.
     """
     manifest_path = Path(manifest_path).resolve()
-    if not values:
+    manifest = load_manifest(manifest_path)
+    base = manifest_path.parent
+    cache: dict[str, dict[str, object]] = {}
+
+    if values is not None and not values:
         raise UsageError("give at least one --value NAME OUTPUT LOCATION")
+
+    if values is None:
+        auto_values: list[tuple[str, str, str]] = []
+        used_names: set[str] = set()
+        for output_record in manifest.get("outputs", []):
+            if output_record.get("kind") == "directory" or not output_record.get("present", True):
+                continue
+            out_path = output_record["path"]
+            if Path(out_path).suffix.lower() not in (".json", ".csv", ".tsv"):
+                continue
+            try:
+                leaves = dict(load_numeric(resolve_inside(base, out_path)))
+                cache[out_path] = leaves
+            except (NumericFormatError, SciProofError, OSError):
+                continue
+            for loc in leaves:
+                if loc.startswith("$#"):
+                    continue
+                macro_name = _auto_macro_name(loc, out_path, used_names)
+                auto_values.append((macro_name, out_path, loc))
+                if len(auto_values) >= MAX_VALUES:
+                    break
+            if len(auto_values) >= MAX_VALUES:
+                break
+        if not auto_values:
+            raise UsageError("no numeric outputs found in manifest to export as LaTeX macros")
+        values = auto_values
+
     if len(values) > MAX_VALUES:
         raise UsageError(f"at most {MAX_VALUES} values per export")
     names = [name for name, _, _ in values]
@@ -106,8 +161,6 @@ def to_latex(manifest_path: Path | str, values: list[tuple[str, str, str]]) -> s
             )
     if len(set(names)) != len(names):
         raise UsageError("a macro name is used more than once")
-
-    manifest = load_manifest(manifest_path)
     base = manifest_path.parent
     declared = {o["path"]: o for o in manifest["outputs"]}
     for _, output, location in values:

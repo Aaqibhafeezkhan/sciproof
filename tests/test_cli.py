@@ -338,3 +338,26 @@ def test_calibrate_quiet_flag_minimal_stdout(project, capsys):
     assert captured.out.strip() == "RESULT: STABLE"
     assert "SciProof calibration of" not in captured.out
     assert captured.err == ""
+
+
+def test_plural_inputs_and_outputs_flags(project, capsys):
+    code = cli.main(
+        [
+            "capture",
+            "--name",
+            "plural_test",
+            "--inputs",
+            "data.json",
+            "--inputs",
+            "experiment.py",
+            "--outputs",
+            "out/exact.txt",
+            "--outputs",
+            "out/result.json",
+            "--",
+            sys.executable,
+            "experiment.py",
+        ]
+    )
+    assert code == cli.EXIT_OK
+    assert "Evidence written to plural_test.sciproof.json" in capsys.readouterr().out

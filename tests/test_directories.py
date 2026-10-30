@@ -608,3 +608,20 @@ def test_capture_reports_a_non_portable_file_name_instead_of_failing_late(dirs):
     with pytest.raises(CaptureError, match="cannot record 'aux.txt'.*reserved Windows device"):
         dirs.dirs_capture(argv=[sys.executable, "-c", code])
     assert not dirs.dirs_manifest.exists()
+
+
+def test_scan_tree_parallel_execution_many_files(tmp_path):
+    """When directory has >= 16 files, scan_tree runs threaded hashing."""
+    root = tmp_path / "dataset"
+    root.mkdir()
+    for i in range(25):
+        (root / f"file_{i:02d}.txt").write_text(f"content_{i}")
+
+    entries = scan_tree(root)
+    assert len(entries) == 25
+    # Verify deterministic alphabetical sorting
+    assert [e.path for e in entries] == [f"file_{i:02d}.txt" for i in range(25)]
+    # Verify digests are computed accurately
+    for i, e in enumerate(entries):
+        assert e.size == len(f"content_{i}")
+        assert len(e.sha256) == 64

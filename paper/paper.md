@@ -71,7 +71,7 @@ A standard verification lifecycle with `SciProof` consists of three stages:
 A researcher captures their experiment using the `record` subcommand:
 
 ```bash
-sciproof record --name benchmark --inputs data.csv -- python train.py
+sciproof record --name benchmark --input data.csv -- python train.py
 ```
 
 `SciProof` executes the script in a supervised child process, computes SHA-256 digests of all declared inputs and outputs, and writes an evidence manifest (`benchmark.sciproof.json`) containing execution metadata (CPU architecture, OS platform, Python version, runtime duration, and exit status).

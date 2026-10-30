@@ -165,3 +165,125 @@ def format_openlineage(manifest_path: Path | str) -> str:
 
 def format_in_toto(manifest_path: Path | str) -> str:
     return json.dumps(to_in_toto(manifest_path), indent=2, allow_nan=False) + "\n"
+
+
+RO_CRATE_CONTEXT = "https://w3id.org/ro/crate/1.1/context"
+PROCESS_RUN_CRATE_PROFILE = "https://w3id.org/ro/wfrun/process/0.6"
+
+
+def to_ro_crate(manifest_path: Path | str) -> dict[str, Any]:
+    """The manifest as a Workflow Run RO-Crate (Process Run Crate 0.6)."""
+    manifest_path = Path(manifest_path).resolve()
+    manifest = load_manifest(manifest_path)
+    ended = datetime.fromisoformat(manifest["created_at"])
+    duration = manifest["execution"]["duration_seconds"]
+    try:
+        started = ended - timedelta(seconds=duration)
+    except OverflowError:
+        started = ended
+
+    exit_code = manifest["execution"]["exit_code"]
+    succeeded = exit_code == 0
+
+    root_dataset: dict[str, Any] = {
+        "@id": "./",
+        "@type": "Dataset",
+        "conformsTo": [{"@id": PROCESS_RUN_CRATE_PROFILE}],
+        "name": manifest["name"],
+        "datePublished": manifest["created_at"],
+        "hasPart": [],
+        "mentions": [{"@id": "#run"}],
+    }
+
+    metadata_descriptor: dict[str, Any] = {
+        "@id": "ro-crate-metadata.json",
+        "@type": "CreativeWork",
+        "conformsTo": [{"@id": "https://w3id.org/ro/crate/1.1"}],
+        "about": {"@id": "./"},
+    }
+
+    run_action: dict[str, Any] = {
+        "@id": "#run",
+        "@type": "CreateAction",
+        "name": manifest["name"],
+        "description": " ".join(manifest["command"]["argv"]),
+        "actionStatus": (
+            "http://schema.org/CompletedActionStatus"
+            if succeeded
+            else "http://schema.org/FailedActionStatus"
+        ),
+        "startTime": started.isoformat(),
+        "endTime": ended.isoformat(),
+        "instrument": {"@id": "#tool"},
+        "object": [],
+        "result": [],
+        "environment": [],
+    }
+
+    tool_entity: dict[str, Any] = {
+        "@id": "#tool",
+        "@type": "SoftwareApplication",
+        "name": "sciproof",
+        "version": __version__,
+        "url": "https://github.com/hayagrivai-labs/sciproof",
+    }
+
+    graph: list[dict[str, Any]] = [
+        root_dataset,
+        metadata_descriptor,
+        run_action,
+        tool_entity,
+    ]
+
+    env_vars = manifest.get("environment", {}).get("env_vars", {})
+    for key, val in env_vars.items():
+        run_action["environment"].append(
+            {
+                "@type": "PropertyValue",
+                "name": key,
+                "value": val,
+            }
+        )
+
+    for inp in manifest.get("inputs", []):
+        path = inp["path"]
+        is_dir = inp.get("kind") == "directory"
+        entity_id = f"{path}/" if is_dir and not path.endswith("/") else path
+        entity: dict[str, Any] = {
+            "@id": entity_id,
+            "@type": "Dataset" if is_dir else "File",
+            "name": path,
+            "sha256": inp.get("sha256"),
+        }
+        if "size" in inp:
+            entity["contentSize"] = inp["size"]
+        graph.append(entity)
+        root_dataset["hasPart"].append({"@id": entity_id})
+        run_action["object"].append({"@id": entity_id})
+
+    for out in manifest.get("outputs", []):
+        if not out.get("present", True):
+            continue
+        path = out["path"]
+        is_dir = out.get("kind") == "directory"
+        entity_id = f"{path}/" if is_dir and not path.endswith("/") else path
+        entity = {
+            "@id": entity_id,
+            "@type": "Dataset" if is_dir else "File",
+            "name": path,
+            "sha256": out.get("sha256"),
+        }
+        if "size" in out:
+            entity["contentSize"] = out["size"]
+        graph.append(entity)
+        root_dataset["hasPart"].append({"@id": entity_id})
+        run_action["result"].append({"@id": entity_id})
+
+    return {
+        "@context": RO_CRATE_CONTEXT,
+        "@graph": graph,
+    }
+
+
+def format_ro_crate(manifest_path: Path | str) -> str:
+    return json.dumps(to_ro_crate(manifest_path), indent=2, allow_nan=False) + "\n"

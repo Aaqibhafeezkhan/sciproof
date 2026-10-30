@@ -116,8 +116,22 @@ def test_cli_writes_a_file_and_refuses_to_mix_formats(project, capsys):
         cli.EXIT_ERROR
     )
     assert "only used with --format latex" in capsys.readouterr().err
-    assert cli.main(["export", project.manifest.name, "--format", "latex"]) == cli.EXIT_ERROR
-    assert "at least one --value" in capsys.readouterr().err
+    assert cli.main(["export", project.manifest.name, "--format", "latex"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    assert r"\newcommand{\Value}{42}" in out
+
+
+def test_auto_export_with_no_numeric_outputs_fails(project, capsys):
+    project.capture(name="no_num", inputs=[], outputs=["out/exact.txt"], numeric_outputs=[])
+    code = cli.main(["export", "no_num.sciproof.json", "--format", "latex"])
+    assert code == cli.EXIT_ERROR
+    assert "no numeric outputs found in manifest" in capsys.readouterr().err
+
+
+def test_empty_values_list_raises_usage_error(project):
+    project.capture()
+    with pytest.raises(UsageError, match="give at least one --value"):
+        to_latex(project.manifest, [])
 
 
 def test_more_than_the_maximum_number_of_values_is_refused(project):
