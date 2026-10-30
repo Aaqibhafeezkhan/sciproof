@@ -88,3 +88,31 @@ def to_manifest_path(base: Path, user_path: str | Path) -> str:
         )
     relative = candidate.relative_to(base_resolved).as_posix()
     return validate_relative_path(relative)
+
+
+def has_glob_magic(pattern: str | Path) -> bool:
+    """Return True if the pattern contains glob wildcards (*, ?, or [])."""
+    s = str(pattern)
+    return any(c in s for c in ("*", "?", "["))
+
+
+def expand_glob(base: Path, pattern: str) -> list[str]:
+    """Expand a glob pattern safely below base directory, returning relative POSIX paths."""
+    base_resolved = base.resolve()
+    norm = pattern.replace("\\", "/")
+    if norm.startswith("/"):
+        raise UnsafePathError(f"glob pattern {pattern!r} is absolute")
+    parts = norm.split("/")
+    if any(p in ("..", "") for p in parts):
+        raise UnsafePathError(f"glob pattern {pattern!r} contains invalid or '..' components")
+    matches: list[str] = []
+    for match in sorted(base_resolved.glob(norm)):
+        try:
+            cand = match.resolve()
+            if cand.is_relative_to(base_resolved) and cand != base_resolved:
+                rel = cand.relative_to(base_resolved).as_posix()
+                validate_relative_path(rel)
+                matches.append(rel)
+        except (UnsafePathError, OSError):
+            continue
+    return matches

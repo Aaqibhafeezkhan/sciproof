@@ -191,7 +191,10 @@ def test_unsupported_file_format_message(tmp_path):
     f.write_text("1\t2\n")
     with pytest.raises(
         NumericFormatError,
-        match=r"numeric comparison supports \.json, \.csv, \.tsv, \.npy files, got 'test\.unknown'",
+        match=(
+            r"numeric comparison supports \.json, \.csv, \.tsv, \.npy, \.npz files, "
+            r"got 'test\.unknown'"
+        ),
     ):
         load_numeric(f)
 

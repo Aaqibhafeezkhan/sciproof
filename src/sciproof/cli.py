@@ -31,6 +31,7 @@ from sciproof.capture import DEFAULT_ATOL, DEFAULT_MAX_LOG_BYTES, DEFAULT_RTOL, 
 from sciproof.diffmanifests import diff_manifests, format_diff_json
 from sciproof.errors import CommandFailed, ConfirmationRequired, SciProofError, UsageError
 from sciproof.export import format_in_toto, format_openlineage, format_ro_crate
+from sciproof.html_report import format_report_html
 from sciproof.inspect_manifest import inspect_file
 from sciproof.junit import list_junit, report_junit
 from sciproof.latex import to_latex
@@ -279,7 +280,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     ver.add_argument(
         "--format",
-        choices=("text", "json", "markdown", "junit", "sarif"),
+        choices=("text", "json", "markdown", "junit", "sarif", "html"),
         default=None,
         help="report format: text (default), json, markdown for CI summaries (for example: "
         ">> $GITHUB_STEP_SUMMARY) or junit XML for CI test viewers; exit codes are the same",
@@ -1072,6 +1073,8 @@ def _run_verify(args: argparse.Namespace) -> int:
 
     elif output_format == "sarif":
         print(format_report_sarif(report), end="")
+    elif output_format == "html":
+        print(format_report_html(report), end="")
 
     elif getattr(args, "quiet", False):
         print(f"RESULT: {report.status.value}")

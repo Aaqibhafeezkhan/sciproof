@@ -33,7 +33,7 @@ from sciproof.manifest import (
     write_manifest,
 )
 from sciproof.numeric import NumericFormatError, load_numeric
-from sciproof.paths import to_manifest_path
+from sciproof.paths import expand_glob, has_glob_magic, to_manifest_path
 from sciproof.runner import (
     CommandInterrupted,
     CommandNotRunnable,
@@ -211,9 +211,34 @@ def capture(
     base = Path(base).resolve()
 
     try:
-        input_paths = [to_manifest_path(base, p) for p in (inputs or [])]
-        exact_paths = [to_manifest_path(base, p) for p in (outputs or [])]
-        numeric_paths = [to_manifest_path(base, p) for p in (numeric_outputs or [])]
+        input_paths: list[str] = []
+        for p in inputs or []:
+            p_str = str(p)
+            if has_glob_magic(p_str):
+                expanded = expand_glob(base, p_str)
+                if not expanded:
+                    raise CaptureError(f"no files matched input glob pattern: {p_str!r}")
+                input_paths.extend(expanded)
+            else:
+                input_paths.append(to_manifest_path(base, p))
+
+        exact_paths: list[str] = []
+        exact_glob_patterns: list[str] = []
+        for p in outputs or []:
+            p_str = str(p)
+            if has_glob_magic(p_str):
+                exact_glob_patterns.append(p_str)
+            else:
+                exact_paths.append(to_manifest_path(base, p))
+
+        numeric_paths: list[str] = []
+        numeric_glob_patterns: list[str] = []
+        for p in numeric_outputs or []:
+            p_str = str(p)
+            if has_glob_magic(p_str):
+                numeric_glob_patterns.append(p_str)
+            else:
+                numeric_paths.append(to_manifest_path(base, p))
     except UnsafePathError as exc:
         raise CaptureError(str(exc)) from exc
     tolerance_by_path: dict[str, dict[str, float]] = {}
@@ -238,7 +263,9 @@ def capture(
     overlap = set(input_paths) & set(exact_paths + numeric_paths)
     if overlap:
         raise CaptureError(f"a file cannot be both input and output: {sorted(overlap)[0]}")
-    if not (input_paths or exact_paths or numeric_paths):
+    if not (
+        input_paths or exact_paths or numeric_paths or exact_glob_patterns or numeric_glob_patterns
+    ):
         raise CaptureError(
             "declare at least one --input, --output or --output-numeric file; "
             "SciProof only verifies files that were declared"
@@ -260,7 +287,10 @@ def capture(
                     "declare either the directory or the file"
                 )
     before: dict[str, str | None] = {}
-    for relative in exact_paths + numeric_paths:
+    pre_paths = list(exact_paths + numeric_paths)
+    for pat in exact_glob_patterns + numeric_glob_patterns:
+        pre_paths.extend(expand_glob(base, pat))
+    for relative in dict.fromkeys(pre_paths):
         target = base / relative
         if target.is_dir():
             if relative in numeric_paths:
@@ -309,6 +339,15 @@ def capture(
                 "inputs must be read-only. No evidence was written."
             )
 
+    for pat in exact_glob_patterns:
+        exact_paths.extend(expand_glob(base, pat))
+    for pat in numeric_glob_patterns:
+        numeric_paths.extend(expand_glob(base, pat))
+    exact_paths = list(dict.fromkeys(exact_paths))
+    numeric_paths = list(dict.fromkeys(numeric_paths))
+    _unique(exact_paths + numeric_paths, "--output/--output-numeric")
+    _refuse_evidence_paths(exact_paths + numeric_paths, name)
+
     # Snapshots are written to a staging directory and only replace the old ones once the new
     # manifest has been written, so a failed capture never damages earlier evidence and
     # --force never leaves snapshots that the new manifest does not reference.
@@ -327,14 +366,14 @@ def capture(
                 entries = _scan_directory(target, f"output {relative!r}")
                 tree = tree_record(entries)
                 record.update(present=True, kind="directory", **tree)
-                if before[relative] == tree["sha256"]:
+                if before.get(relative) == tree["sha256"]:
                     warnings.append(
                         f"output {relative!r} existed before the run and was not changed by it"
                     )
             elif target.is_file():
                 digest, size = sha256_file(target)
                 record.update(present=True, sha256=digest, size=size)
-                if before[relative] == digest:
+                if before.get(relative) == digest:
                     warnings.append(
                         f"output {relative!r} existed before the run and was not changed by it"
                     )

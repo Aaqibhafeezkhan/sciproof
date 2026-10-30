@@ -22,7 +22,7 @@ from sciproof.jsonstrict import reject_duplicate_keys
 
 MAX_NUMERIC_FILE_BYTES = 64 * 1024 * 1024
 MAX_REPORTED_DIFFERENCES = 10
-SUPPORTED_SUFFIXES = (".json", ".csv", ".tsv", ".npy")
+SUPPORTED_SUFFIXES = (".json", ".csv", ".tsv", ".npy", ".npz")
 NUMPY_KINDS = "biufc"  # bool, int, unsigned, float, complex
 
 Leaf = tuple[str, object]
@@ -60,6 +60,8 @@ def load_numeric(path: Path) -> list[Leaf]:
         raise NumericFormatError(f"cannot read {path.name}: {exc}") from exc
     if suffix == ".npy":
         return _load_npy(path)
+    if suffix == ".npz":
+        return _load_npz(path)
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -116,6 +118,43 @@ def _load_npy(path: Path) -> list[Leaf]:
             f"(dtype {getattr(array, 'dtype', type(array).__name__)})"
         )
     return [("shape", list(array.shape)), ("dtype", str(array.dtype)), ("data", array)]
+
+
+def _load_npz(path: Path) -> list[Leaf]:
+    """Load a NumPy ``.npz`` archive containing multiple arrays (needs optional NumPy extra)."""
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise NumericFormatError(
+            f"comparing {path.name} needs NumPy: pip install 'sciproof[numpy]'"
+        ) from exc
+    try:
+        archive = np.load(path, allow_pickle=False)
+    except (ValueError, OSError, EOFError) as exc:
+        raise NumericFormatError(f"{path.name} is not a valid .npz archive: {exc}") from exc
+    except Exception as exc:
+        raise NumericFormatError(f"{path.name} is not a valid .npz archive: {exc}") from exc
+
+    try:
+        file_keys = sorted(archive.files)
+    except Exception as exc:
+        raise NumericFormatError(f"cannot inspect arrays in {path.name}: {exc}") from exc
+
+    leaves: list[Leaf] = [("arrays", len(file_keys))]
+    for key in file_keys:
+        try:
+            array = archive[key]
+        except Exception as exc:
+            raise NumericFormatError(f"cannot read array {key!r} from {path.name}: {exc}") from exc
+        if not isinstance(array, np.ndarray) or array.dtype.kind not in NUMPY_KINDS:
+            raise NumericFormatError(
+                f"{path.name} [{key}]: only numeric, boolean and complex arrays are supported "
+                f"(dtype {getattr(array, 'dtype', type(array).__name__)})"
+            )
+        leaves.append((f"{key}.shape", list(array.shape)))
+        leaves.append((f"{key}.dtype", str(array.dtype)))
+        leaves.append((f"{key}.data", array))
+    return leaves
 
 
 @dataclass(frozen=True)
@@ -190,7 +229,9 @@ def _number_details(
     return absolute, relative, allowed
 
 
-def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> list[Difference]:
+def _compare_arrays(
+    expected: Any, actual: Any, rtol: float, atol: float, prefix: str = ""
+) -> list[Difference]:
     """Element-wise comparison of two equally shaped arrays with the scalar rule of ``compare``."""
     import numpy as np
 
@@ -210,7 +251,7 @@ def _compare_arrays(expected: Any, actual: Any, rtol: float, atol: float) -> lis
     found: list[Difference] = []
     for index in np.argwhere(bad)[:MAX_REPORTED_DIFFERENCES]:
         key = tuple(int(i) for i in index)
-        location = f"data{list(key)}"
+        location = f"{prefix}.data{list(key)}" if prefix else f"data{list(key)}"
         recorded, seen = expected[key], actual[key]
         absolute = relative = allowed = None
         if expected.dtype.kind in "iuf" and actual.dtype.kind in "iuf":
@@ -301,11 +342,12 @@ def compare_detailed(
                 )
             )
             break
-        if loc_e == "data" and hasattr(val_e, "shape"):
-            if (
-                expected[0][1] == actual[0][1] and expected[1][1] == actual[1][1]
-            ):  # same shape and dtype
-                differences.extend(_compare_arrays(val_e, val_a, rtol, atol))
+        if (loc_e == "data" or loc_e.endswith(".data")) and hasattr(val_e, "shape"):
+            prefix = loc_e.removesuffix(".data") if loc_e.endswith(".data") else ""
+            if getattr(val_e, "shape", None) == getattr(val_a, "shape", None) and getattr(
+                val_e, "dtype", None
+            ) == getattr(val_a, "dtype", None):
+                differences.extend(_compare_arrays(val_e, val_a, rtol, atol, prefix=prefix))
             continue
         absolute = relative = allowed = None
         kind = "value"
