@@ -233,6 +233,32 @@ def test_git_rules_with_a_clean_and_a_dirty_tree(project):
     assert _one(dirty, "manifest.forbid_dirty_git").status is Status.FAIL
 
 
+@pytest.mark.parametrize(
+    ("signature", "expected_status", "message"),
+    [
+        (None, Status.INCONCLUSIVE, "no --allowed-signers file"),
+        ({"status": "good", "principal": "alice@example.org"}, Status.PASS, "alice@example.org"),
+        ({"status": "bad"}, Status.FAIL, "signature is not good"),
+        ({"status": "error"}, Status.INCONCLUSIVE, "could not be checked"),
+    ],
+)
+def test_require_signature_reports_each_signature_verification_outcome(
+    project, signature, expected_status, message
+):
+    project.capture()
+    report = verify(project.manifest)
+    report.signature = signature
+    apply_policy(
+        parse_policy("version = 1\n[manifest]\nrequire_signature = true\n"),
+        json.loads(project.manifest.read_text()),
+        report,
+    )
+
+    check = _one(report, "manifest.require_signature")
+    assert check.status is expected_status
+    assert message in check.message
+
+
 def test_min_claims(project):
     text = "version = 1\n[manifest]\nmin_claims = 2\n"
     assert _one(_apply(project, text), "manifest.min_claims").status is Status.FAIL
