@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 
@@ -10,6 +11,7 @@ import pytest
 from sciproof import cli, load_manifest, verify_manifest
 from sciproof.errors import CaptureError, CommandFailed
 from sciproof.record import record
+from sciproof.runner import CommandInterrupted, CommandNotRunnable, CommandTimeout
 from sciproof.verify import Status
 
 # Runs are counted in a file outside the project (so the counter is not itself an output).
@@ -290,3 +292,76 @@ def test_cli_record_prints_the_stderr_of_the_failed_run(lab, monkeypatch, capsys
     assert err[0].startswith("error: the second run of the command failed (exit status 1)")
     assert err[1] == "  last lines of its standard error:"
     assert err[-2].startswith("    FileNotFoundError:") and "gone.txt" in err[-2]
+
+
+@pytest.mark.parametrize(
+    "name, argv, message",
+    [
+        ("bad name with spaces!", [sys.executable, "run.py"], "invalid name"),
+        ("exp", [], "no command given"),
+        ("exp", [""], "no command given"),
+    ],
+)
+def test_invalid_record_arguments_do_not_run_or_write_evidence(lab, name, argv, message):
+    with pytest.raises(CaptureError, match=message):
+        record(name=name, argv=argv, base=lab.path)
+    assert lab.runs() == 0
+    assert not list(lab.path.glob("*.sciproof*"))
+
+
+def test_snapshot_limit_allows_the_boundary_and_refuses_the_next_file(tmp_path, monkeypatch):
+    module = importlib.import_module("sciproof.record")
+    monkeypatch.setattr(module, "MAX_SCANNED_FILES", 2)
+    for name in ("a.txt", "b.txt"):
+        (tmp_path / name).write_text(name)
+    assert set(module._snapshot(tmp_path)) == {"a.txt", "b.txt"}
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "c.txt").write_text("third")
+    with pytest.raises(CaptureError, match="more than 2 files.*smaller directory"):
+        module._snapshot(tmp_path)
+
+
+def test_record_scan_limit_stops_before_the_probe_runs(lab, monkeypatch):
+    module = importlib.import_module("sciproof.record")
+    monkeypatch.setattr(module, "MAX_SCANNED_FILES", 2)
+    with pytest.raises(CaptureError, match="more than 2 files"):
+        lab.go()
+    assert lab.runs() == 0
+    assert not list(lab.path.glob("*.sciproof*"))
+
+
+def test_unparseable_numeric_output_is_captured_exactly(lab):
+    script = lab.path / "run.py"
+    script.write_text(
+        script.read_text() + '\npathlib.Path("out/bad.json").write_text("not JSON")\n'
+    )
+    result = lab.go()
+    assert "out/bad.json" in result.exact
+    assert "out/bad.json" not in result.numeric
+    assert verify_manifest(result.capture.manifest_path).status == Status.PASS
+
+
+@pytest.mark.parametrize(
+    "failure, message",
+    [
+        (CommandInterrupted("cancelled"), "interrupted; nothing was recorded"),
+        (CommandTimeout("timeout after 1s"), "timeout after 1s; nothing was recorded"),
+        (CommandNotRunnable("cannot launch command"), "cannot launch command"),
+    ],
+)
+def test_second_run_failures_are_clean_capture_errors(lab, monkeypatch, failure, message):
+    module = importlib.import_module("sciproof.record")
+
+    def fail_run(argv, base, timeout):
+        assert argv == [sys.executable, "run.py"]
+        assert base == lab.path
+        assert timeout == 5
+        raise failure
+
+    monkeypatch.setattr(module, "run_command", fail_run)
+    with pytest.raises(CaptureError, match=message) as caught:
+        lab.go(timeout=5)
+    assert caught.value.__cause__ is failure
+    assert lab.runs() == 1  # the real discovery run completed before the failing second run
+    assert not (lab.path / "exp.sciproof.json").exists()
+    assert not (lab.path / "exp.sciproof.d").exists()
